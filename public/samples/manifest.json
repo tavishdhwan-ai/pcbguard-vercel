@@ -1,0 +1,35 @@
+[
+  {
+    "id": "sample-1",
+    "name": "Revision C Controller",
+    "status": "clean",
+    "expected": "Pass",
+    "description": "Golden reference controller board with clean trace geometries and verified via continuity.",
+    "path": "/samples/sample_clean_1.jpg"
+  },
+  {
+    "id": "sample-2",
+    "name": "Power Distribution Bus",
+    "status": "clean",
+    "expected": "Pass",
+    "description": "Dual-rail power breakout with dense surface-mount filter capacitor array.",
+    "path": "/samples/sample_clean_2.jpg"
+  },
+  {
+    "id": "sample-3",
+    "name": "Signal Bus Assembly",
+    "status": "defect",
+    "expected": "Defect found",
+    "description": "Production candidate exhibiting multiple undrilled via pads along the escape route.",
+    "path": "/samples/sample_defect_1.jpg"
+  },
+  {
+    "id": "sample-4",
+    "name": "BGA Escape Routing",
+    "status": "defect",
+    "expected": "Defect found",
+    "description": "Fine-pitch SMT breakout with missing drill hits on interconnect vias.",
+    "path": "/samples/sample_defect_2.jpg"
+  }
+]
+
