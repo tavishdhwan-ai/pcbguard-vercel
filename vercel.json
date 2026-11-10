@@ -1,0 +1,8 @@
+{
+  "functions": {
+    "api/detect.py": {
+      "includeFiles": "model/**",
+      "maxDuration": 30
+    }
+  }
+}

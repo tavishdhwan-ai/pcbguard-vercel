@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PCBGuard – PCB Defect Inspection</title>
+<style>
+  :root { --bg:#f6f7f9; --card:#fff; --text:#1c2430; --muted:#5b6675; --line:#dfe3e8; --accent:#1f6feb; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#12161c; --card:#1a2029; --text:#e8ecf1; --muted:#9aa5b4; --line:#2b3441; --accent:#58a6ff; }
+  }
+  * { box-sizing: border-box; }
+  body { margin:0; font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; background:var(--bg); color:var(--text); }
+  main { max-width: 980px; margin: 0 auto; padding: 24px 16px 48px; }
+  h1 { margin: 0 0 4px; font-size: 1.6rem; }
+  p.sub { margin: 0 0 20px; color: var(--muted); }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 16px; margin-bottom: 16px; }
+  .controls { display:flex; flex-wrap:wrap; gap:16px; align-items:center; }
+  label { font-size: .9rem; color: var(--muted); }
+  input[type=range] { vertical-align: middle; }
+  .metrics { display:grid; grid-template-columns: repeat(3, 1fr); gap:12px; }
+  .metric .v { font-size: 1.6rem; font-weight: 600; }
+  .metric .k { color: var(--muted); font-size: .85rem; }
+  canvas { max-width: 100%; height: auto; border-radius: 8px; border: 1px solid var(--line); }
+  table { width:100%; border-collapse: collapse; font-size: .9rem; }
+  th, td { text-align:left; padding: 6px 8px; border-bottom: 1px solid var(--line); }
+  th { color: var(--muted); font-weight: 500; }
+  button { background: var(--accent); color:#fff; border:0; border-radius:8px; padding: 8px 14px; font-size:.9rem; cursor:pointer; }
+  button:disabled { opacity:.5; cursor:default; }
+  .msg { padding: 10px 12px; border-radius: 8px; background: rgba(210,153,34,.15); border:1px solid rgba(210,153,34,.5); }
+  .ok { background: rgba(46,160,67,.15); border-color: rgba(46,160,67,.5); }
+  .wrap { overflow-x:auto; }
+</style>
+</head>
+<body>
+<main>
+  <h1>PCBGuard</h1>
+  <p class="sub">PCB defect detection &middot; YOLO26s &middot; six defect classes</p>
+
+  <div class="card">
+    <div class="controls">
+      <input id="file" type="file" accept="image/jpeg,image/png">
+      <label>Confidence threshold: <b id="confVal">0.45</b>
+        <input id="conf" type="range" min="0.05" max="0.95" step="0.05" value="0.45">
+      </label>
+    </div>
+  </div>
+
+  <div id="status"></div>
+
+  <div id="results" hidden>
+    <div class="card metrics">
+      <div class="metric"><div class="v" id="mCount">–</div><div class="k">Defects detected</div></div>
+      <div class="metric"><div class="v" id="mClasses">–</div><div class="k">Defect classes found</div></div>
+      <div class="metric"><div class="v" id="mTime">–</div><div class="k">Model inference time</div></div>
+    </div>
+    <div class="card"><canvas id="canvas"></canvas></div>
+    <div class="card wrap">
+      <h3 style="margin-top:0">Category-wise summary</h3>
+      <table id="summary"></table>
+    </div>
+    <div class="card wrap">
+      <h3 style="margin-top:0">Detections</h3>
+      <table id="details"></table>
+      <p><button id="csv">Download inspection report (CSV)</button></p>
+    </div>
+  </div>
+</main>
+
+<script>
+const COLORS = ["#e6194b","#3cb44b","#4363d8","#f58231","#911eb4","#008080"];
+const $ = id => document.getElementById(id);
+let current = null;
+
+$("conf").addEventListener("input", () => { $("confVal").textContent = (+$("conf").value).toFixed(2); });
+$("conf").addEventListener("change", () => { if ($("file").files[0]) analyse($("file").files[0]); });
+$("file").addEventListener("change", e => { if (e.target.files[0]) analyse(e.target.files[0]); });
+
+function say(text, ok) {
+  $("status").innerHTML = text ? `<div class="msg ${ok ? "ok" : ""}">${text}</div>` : "";
+}
+
+async function analyse(file) {
+  say("Analysing…");
+  $("results").hidden = true;
+  let bmp;
+  try { bmp = await createImageBitmap(file); }
+  catch { say("That file could not be read as an image."); return; }
+
+  // Letterbox to 640x640 so the upload stays small and matches the model input.
+  const S = 640, scale = Math.min(S / bmp.width, S / bmp.height);
+  const w = Math.round(bmp.width * scale), h = Math.round(bmp.height * scale);
+  const padX = Math.floor((S - w) / 2), padY = Math.floor((S - h) / 2);
+  const c = document.createElement("canvas"); c.width = c.height = S;
+  const g = c.getContext("2d");
+  g.fillStyle = "rgb(114,114,114)"; g.fillRect(0, 0, S, S);
+  g.drawImage(bmp, padX, padY, w, h);
+  const blob = await new Promise(r => c.toBlob(r, "image/jpeg", 0.95));
+
+  let data;
+  try {
+    const res = await fetch("/api/detect?conf=" + $("conf").value, {
+      method: "POST", headers: { "Content-Type": "image/jpeg" }, body: blob });
+    data = await res.json();
+    if (!res.ok) { say(data.error || "The server returned an error."); return; }
+  } catch { say("Could not reach the detection API."); return; }
+
+  // Map boxes from 640x640 letterbox space back to the original image.
+  const dets = data.detections.map(d => ({
+    ...d,
+    box: [(d.box[0]-padX)/scale, (d.box[1]-padY)/scale, (d.box[2]-padX)/scale, (d.box[3]-padY)/scale]
+      .map(v => Math.max(0, v))
+  }));
+  current = { name: file.name, dets };
+  draw(bmp, dets);
+  render(dets, data.inference_ms);
+  say(dets.length ? "" : "No defects detected at this confidence threshold.", !dets.length);
+}
+
+function draw(bmp, dets) {
+  const cv = $("canvas"); cv.width = bmp.width; cv.height = bmp.height;
+  const g = cv.getContext("2d");
+  g.drawImage(bmp, 0, 0);
+  const lw = Math.max(2, bmp.width / 200), fs = Math.max(12, bmp.width / 40);
+  g.lineWidth = lw; g.font = `${fs}px sans-serif`; g.textBaseline = "top";
+  dets.forEach(d => {
+    const [x1, y1, x2, y2] = d.box, col = COLORS[d.class_id % COLORS.length];
+    g.strokeStyle = col; g.strokeRect(x1, y1, x2 - x1, y2 - y1);
+    const label = `${d.name} ${(d.confidence * 100).toFixed(0)}%`;
+    const tw = g.measureText(label).width + 6;
+    const ly = y1 - fs - 4 < 0 ? y1 : y1 - fs - 4;
+    g.fillStyle = col; g.fillRect(x1, ly, tw, fs + 4);
+    g.fillStyle = "#fff"; g.fillText(label, x1 + 3, ly + 2);
+  });
+}
+
+function render(dets, ms) {
+  $("mCount").textContent = dets.length;
+  $("mClasses").textContent = new Set(dets.map(d => d.name)).size;
+  $("mTime").textContent = ms + " ms";
+  const groups = {};
+  dets.forEach(d => { (groups[d.name] ||= []).push(d.confidence); });
+  $("summary").innerHTML = "<tr><th>Defect</th><th>Count</th><th>Mean confidence</th></tr>" +
+    Object.entries(groups).map(([n, a]) =>
+      `<tr><td>${n}</td><td>${a.length}</td><td>${(a.reduce((x, y) => x + y, 0) / a.length).toFixed(3)}</td></tr>`).join("");
+  $("details").innerHTML = "<tr><th>Defect</th><th>Confidence</th><th>x1</th><th>y1</th><th>x2</th><th>y2</th></tr>" +
+    dets.map(d => `<tr><td>${d.name}</td><td>${d.confidence.toFixed(3)}</td>${d.box.map(v => `<td>${v.toFixed(1)}</td>`).join("")}</tr>`).join("");
+  $("results").hidden = false;
+}
+
+$("csv").addEventListener("click", () => {
+  if (!current) return;
+  const rows = ["defect,confidence,x1,y1,x2,y2"].concat(
+    current.dets.map(d => [d.name, d.confidence, ...d.box.map(v => v.toFixed(1))].join(",")));
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([rows.join("\n")], { type: "text/csv" }));
+  a.download = "pcbguard_report_" + current.name.replace(/\.[^.]+$/, "") + ".csv";
+  a.click();
+});
+</script>
+</body>
+</html>
