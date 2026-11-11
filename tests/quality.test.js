@@ -73,3 +73,4 @@ test("Quality checker - detects underexposure and clipping", () => {
   const issue = res.issues.find(i => i.code === "UNDEREXPOSED");
   assert.ok(issue);
 });
+

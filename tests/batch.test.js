@@ -120,3 +120,52 @@ test("BatchProcessor - cancel operation cancels remaining items", async () => {
   const summary = processor.getSummary();
   assert.ok(summary.counts.cancelled >= 1);
 });
+
+test("BatchProcessor - preserves detections, regions, dimensions, and escapes CSV", async () => {
+  const processor = new BatchProcessor({
+    concurrency: 1,
+    inspectFn: async (file) => {
+      if (file.name === "failing.jpg") throw new Error("Unreadable image, bad format");
+      return {
+        score: 0.8842,
+        verdict: "defect",
+        origWidth: 1200,
+        origHeight: 800,
+        thumbnailUrl: "data:image/jpeg;base64,mockthumb",
+        detections: [{ box: [100, 100, 200, 200], confidence: 0.8842 }],
+        regions: [{ id: 1, score: 0.8842, box_px: [100, 100, 200, 200], area_px: 10000 }]
+      };
+    },
+    meta: testMeta
+  });
+
+  processor.addFiles([
+    { name: 'board, "special" #1.jpg', size: 2048 },
+    { name: "failing.jpg", size: 512 }
+  ]);
+
+  await new Promise(r => {
+    processor.onComplete = r;
+    processor.run();
+  });
+
+  const doneItem = processor.items[0];
+  assert.strictEqual(doneItem.status, "done");
+  assert.strictEqual(doneItem.origWidth, 1200);
+  assert.strictEqual(doneItem.origHeight, 800);
+  assert.strictEqual(doneItem.thumbnailUrl, "data:image/jpeg;base64,mockthumb");
+  assert.strictEqual(doneItem.regions.length, 1);
+  assert.strictEqual(doneItem.regionsCount, 1);
+
+  const failItem = processor.items[1];
+  assert.strictEqual(failItem.status, "failed");
+  assert.strictEqual(failItem.error, "Unreadable image, bad format");
+
+  const csv = processor.exportCsv();
+  assert.ok(csv.includes('"board, ""special"" #1.jpg"'), "Filename with comma and quotes must be properly escaped in CSV");
+  assert.ok(csv.includes("DEFECT"));
+  assert.ok(csv.includes("0.8842"));
+  assert.ok(csv.includes('"Unreadable image, bad format"'));
+});
+
+

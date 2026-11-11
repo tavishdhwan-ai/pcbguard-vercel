@@ -40,3 +40,4 @@ const QUALITY_CONSTANTS = {
 if (typeof module !== "undefined" && module.exports) {
   module.exports = { QUALITY_CONSTANTS };
 }
+

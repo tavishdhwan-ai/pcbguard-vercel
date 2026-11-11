@@ -89,3 +89,4 @@ test("Deviation regions - reports pixel dimensions only without defect class lab
   assert.strictEqual(regions[1].width_px, 60);
   assert.strictEqual(regions[1].height_px, 20);
 });
+

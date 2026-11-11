@@ -68,3 +68,4 @@ function buildProvenanceBundle(params = {}) {
 if (typeof module !== "undefined" && module.exports) {
   module.exports = { buildProvenanceBundle };
 }
+

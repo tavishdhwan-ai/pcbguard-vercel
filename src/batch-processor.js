@@ -105,7 +105,12 @@ class BatchProcessor {
       item.score = typeof result.score === "number" ? result.score : 0.0;
       item.verdict = result.verdict || (item.score >= this.meta.decision.threshold ? "defect" : "pass");
       item.roundTripMs = result.roundTripMs || 0;
-      item.regionsCount = Array.isArray(result.detections) ? result.detections.length : 0;
+      item.detections = Array.isArray(result.detections) ? result.detections : [];
+      item.regions = Array.isArray(result.regions) ? result.regions : [];
+      item.regionsCount = item.regions.length || item.detections.length;
+      item.thumbnailUrl = result.thumbnailUrl || null;
+      item.origWidth = result.origWidth || null;
+      item.origHeight = result.origHeight || null;
       item.status = "done";
     } catch (err) {
       item.status = "failed";
@@ -137,12 +142,11 @@ class BatchProcessor {
     const headers = [
       "ID",
       "Filename",
-      "Size_Bytes",
-      "Status",
       "Verdict",
-      "Score",
-      "Threshold",
-      "Regions_Count",
+      "Anomaly_Score",
+      "Deviation_Regions",
+      "Status",
+      "Size_Bytes",
       "Round_Trip_Ms",
       "Error",
       "Model_Version",
@@ -155,22 +159,30 @@ class BatchProcessor {
     const commit = this.meta.model?.commit ?? "unknown";
     const ts = new Date().toISOString();
 
+    const escapeCsv = (str) => {
+      if (str === null || str === undefined) return '""';
+      const s = String(str);
+      if (s.includes('"') || s.includes(',') || s.includes('\n') || s.includes('\r')) {
+        return `"${s.replace(/"/g, '""')}"`;
+      }
+      return `"${s}"`;
+    };
+
     const rows = [headers.join(",")];
     for (const item of this.items) {
       rows.push([
         item.id,
-        `"${item.name}"`,
-        item.size,
-        item.status,
-        item.verdict || "none",
+        escapeCsv(item.name),
+        escapeCsv(item.verdict ? item.verdict.toUpperCase() : "NONE"),
         item.score !== null ? item.score.toFixed(4) : "",
-        threshold,
-        item.regionsCount,
+        item.regionsCount !== undefined && item.regionsCount !== null ? item.regionsCount : "",
+        escapeCsv(item.status.toUpperCase()),
+        item.size,
         item.roundTripMs !== null ? item.roundTripMs.toFixed(1) : "",
-        `"${item.error || ""}"`,
-        version,
-        commit,
-        ts
+        escapeCsv(item.error || ""),
+        escapeCsv(version),
+        escapeCsv(commit),
+        escapeCsv(ts)
       ].join(","));
     }
 
@@ -212,3 +224,4 @@ class BatchProcessor {
 if (typeof module !== "undefined" && module.exports) {
   module.exports = { BatchProcessor };
 }
+

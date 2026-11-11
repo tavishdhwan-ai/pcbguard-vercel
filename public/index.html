@@ -641,18 +641,279 @@
     display: flex;
     gap: 16px;
     font-size: 12px;
+    flex-wrap: wrap;
   }
 
   .batch-dropzone {
     border: 2px dashed var(--line);
-    padding: 36px 20px;
+    padding: 28px 20px;
     text-align: center;
     cursor: pointer;
     background: var(--surface);
+    transition: border-color 0.15s ease;
   }
 
   .batch-dropzone.drag-over {
     border-color: var(--accent);
+    background: rgba(255, 90, 31, 0.04);
+  }
+
+  /* Batch Section Headers & Layout */
+  .batch-section-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--line);
+    margin-bottom: 12px;
+  }
+
+  .batch-section-sub {
+    font-size: 11px;
+    color: var(--muted);
+    font-family: var(--font-mono);
+  }
+
+  /* Thumbnail Gallery */
+  .batch-gallery-wrap {
+    border: 1px solid var(--line);
+    padding: 16px;
+    background: var(--surface);
+  }
+
+  .batch-gallery {
+    display: flex;
+    gap: 12px;
+    overflow-x: auto;
+    padding: 4px 2px 10px 2px;
+    scroll-behavior: smooth;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .batch-thumb-item {
+    flex: 0 0 100px;
+    width: 100px;
+    background: var(--bg);
+    border: 1px solid var(--line);
+    padding: 6px;
+    cursor: pointer;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    transition: all 0.15s ease;
+    user-select: none;
+    position: relative;
+  }
+
+  .batch-thumb-item:hover {
+    border-color: var(--ink);
+    transform: translateY(-1px);
+  }
+
+  .batch-thumb-item.is-selected {
+    border: 2px solid var(--accent);
+    box-shadow: 0 0 0 2px rgba(255, 90, 31, 0.25);
+  }
+
+  .batch-thumb-img-box {
+    width: 88px;
+    height: 88px;
+    background: #000;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    border: 1px solid rgba(255, 255, 255, 0.05);
+  }
+
+  .batch-thumb-img-box img {
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain;
+    display: block;
+  }
+
+  .batch-thumb-status-badge {
+    position: absolute;
+    bottom: 2px;
+    right: 2px;
+    font-size: 9px;
+    font-weight: 700;
+    padding: 1px 4px;
+    font-family: var(--font-mono);
+    line-height: 1.2;
+    text-transform: uppercase;
+  }
+
+  .badge-pass { background: var(--verdict-pass); color: #000; }
+  .badge-borderline { background: var(--verdict-borderline); color: #000; }
+  .badge-defect { background: var(--accent); color: #fff; }
+  .badge-failed { background: #ef4444; color: #fff; }
+  .badge-queued { background: var(--line); color: var(--ink); }
+  .badge-inspecting { background: var(--accent); color: #fff; animation: pulseBadge 1.2s infinite; }
+
+  @keyframes pulseBadge {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+  }
+
+  .batch-thumb-filename {
+    font-size: 11px;
+    font-family: var(--font-mono);
+    color: var(--ink);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    width: 100%;
+    text-align: center;
+  }
+
+  /* Interactive Inspection Viewer */
+  .batch-viewer-wrap {
+    border: 1px solid var(--line);
+    background: var(--surface);
+    display: flex;
+    flex-direction: column;
+  }
+
+  .batch-viewer-header {
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--line);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+
+  .batch-viewer-title-wrap {
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+  }
+
+  .batch-viewer-filename {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--accent);
+  }
+
+  .batch-viewer-controls {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    font-size: 11px;
+    font-family: var(--font-mono);
+    flex-wrap: wrap;
+  }
+
+  .batch-ctrl-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
+    user-select: none;
+  }
+
+  .batch-ctrl-item input[type="checkbox"] {
+    accent-color: var(--accent);
+    cursor: pointer;
+  }
+
+  .batch-canvas-stage {
+    background: #0a0e0a;
+    min-height: 400px;
+    max-height: 580px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    overflow: hidden;
+    padding: 12px;
+  }
+
+  .batch-canvas-stage canvas {
+    max-width: 100%;
+    max-height: 550px;
+    object-fit: contain;
+    display: block;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+  }
+
+  .batch-stage-msg {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(10, 14, 10, 0.85);
+    color: var(--ink);
+    font-family: var(--font-mono);
+    font-size: 14px;
+    padding: 24px;
+    text-align: center;
+  }
+
+  /* Selected Image Details Strip */
+  .batch-detail-strip {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 1px;
+    background: var(--line);
+    border-top: 1px solid var(--line);
+  }
+
+  .batch-detail-cell {
+    background: var(--bg);
+    padding: 12px 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .batch-detail-lbl {
+    font-size: 10px;
+    font-family: var(--font-mono);
+    color: var(--muted);
+    letter-spacing: 0.05em;
+  }
+
+  .batch-detail-val {
+    font-size: 13px;
+    font-family: var(--font-mono);
+    font-weight: 600;
+    color: var(--ink);
+    word-break: break-all;
+  }
+
+  /* Consolidated Results Table */
+  .batch-table-section {
+    border: 1px solid var(--line);
+    padding: 16px;
+    background: var(--surface);
+  }
+
+  .batch-table-row {
+    cursor: pointer;
+    transition: background 0.1s ease;
+  }
+
+  .batch-table-row:hover {
+    background: rgba(255, 90, 31, 0.04);
+  }
+
+  .batch-table-row.is-selected-row {
+    background: rgba(255, 90, 31, 0.12) !important;
+    font-weight: 600;
+  }
+
+  .batch-bottom-bar {
+    margin-top: 16px;
+    display: flex;
+    justify-content: flex-end;
   }
 
   /* Model Card & Robustness */
@@ -860,53 +1121,132 @@
     </section>
   </div>
 
-  <!-- BATCH MODE VIEW (Feature 5) -->
+  <!-- BATCH MODE VIEW (Interactive Inspection Suite) -->
   <div id="batchView" class="batch-section" hidden>
     <div class="batch-controls">
       <div class="batch-stats">
         <div>TOTAL: <strong id="bStatTotal">0</strong>/50</div>
-        <div>DONE: <strong id="bStatDone">0</strong></div>
+        <div>ANALYZED: <strong id="bStatDone">0</strong></div>
         <div>PASS: <strong id="bStatPass" style="color:var(--verdict-pass)">0</strong></div>
         <div>BORDERLINE: <strong id="bStatBorder" style="color:var(--verdict-borderline)">0</strong></div>
         <div>DEFECT: <strong id="bStatDefect" style="color:var(--accent)">0</strong></div>
-        <div>FAILED: <strong id="bStatFailed">0</strong></div>
+        <div>FAILED: <strong id="bStatFailed" style="color:#ef4444">0</strong></div>
       </div>
-      <div style="display:flex; gap:8px;">
+      <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
         <input type="file" id="batchFileInput" multiple accept="image/jpeg,image/png,image/webp">
         <button type="button" id="btnBatchSelect" class="btn btn-accent">ADD FILES</button>
         <button type="button" id="btnBatchRun" class="btn" disabled>RUN BATCH</button>
         <button type="button" id="btnBatchCancel" class="btn btn-outline" disabled>CANCEL</button>
-        <button type="button" id="btnBatchExportCsv" class="btn btn-outline" disabled>EXPORT CSV</button>
+        <button type="button" id="btnBatchExportCsv" class="btn btn-accent" disabled>DOWNLOAD CSV</button>
         <button type="button" id="btnBatchExportJson" class="btn btn-outline" disabled>EXPORT JSON</button>
       </div>
     </div>
 
     <div id="batchDropzone" class="batch-dropzone">
       <div class="drop-prompt-text">DROP UP TO 50 PCB FILES HERE</div>
-      <div class="drop-prompt-sub">CONCURRENCY 2 &middot; FAST DISPATCH &middot; STREAMING EVALUATION</div>
+      <div class="drop-prompt-sub">CONCURRENCY 2 &middot; FAST DISPATCH &middot; STREAMING EVALUATION &middot; INTERACTIVE VIEWER</div>
     </div>
 
-    <div class="table-wrap">
-      <table aria-label="Batch inspection items table">
-        <thead>
-          <tr>
-            <th>#</th>
-            <th>FILENAME</th>
-            <th>STATUS</th>
-            <th>VERDICT</th>
-            <th class="num-right">SCORE</th>
-            <th class="num-right">REGIONS</th>
-            <th class="num-right">ROUND TRIP</th>
-            <th>ACTION</th>
-          </tr>
-        </thead>
-        <tbody id="batchTableBody">
-          <tr>
-            <td colspan="8" class="empty-cell">NO BATCH ITEMS LOADED</td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
+    <!-- 1. THUMBNAIL GALLERY -->
+    <section id="batchGallerySection" class="batch-gallery-wrap" hidden>
+      <div class="batch-section-header">
+        <span class="table-title">THUMBNAIL GALLERY</span>
+        <span id="batchGallerySummary" class="batch-section-sub">0 ANALYZED</span>
+      </div>
+      <div id="batchGallery" class="batch-gallery" role="tablist" aria-label="Batch PCB thumbnails">
+        <!-- Rendered dynamically -->
+      </div>
+    </section>
+
+    <!-- 3. INTERACTIVE INSPECTION VIEWER -->
+    <section id="batchViewerSection" class="batch-viewer-wrap" hidden>
+      <div class="batch-viewer-header">
+        <div class="batch-viewer-title-wrap">
+          <span class="table-title">INTERACTIVE INSPECTION VIEWER</span>
+          <span id="batchViewerFilename" class="batch-viewer-filename">&ndash;</span>
+        </div>
+        <div class="batch-viewer-controls">
+          <label class="batch-ctrl-item">
+            <input type="checkbox" id="batchToggleHeatmap" checked>
+            <span>HEATMAP OVERLAY</span>
+          </label>
+          <label class="batch-ctrl-item">
+            <input type="checkbox" id="batchToggleBoxes" checked>
+            <span>DEVIATION BOXES</span>
+          </label>
+          <label class="batch-ctrl-item">
+            <span>OPACITY</span>
+            <input type="range" id="batchHeatmapOpacity" min="0.2" max="1.0" step="0.05" value="0.75" class="range-slider" style="width:70px; margin:0 4px;">
+            <span id="batchOpacityVal" style="font-size:11px; font-family:var(--font-mono); width:28px;">75%</span>
+          </label>
+        </div>
+      </div>
+
+      <div class="batch-canvas-stage" id="batchCanvasStage">
+        <canvas id="batchViewerCanvas"></canvas>
+        <div id="batchStageMsg" class="batch-stage-msg" hidden></div>
+      </div>
+
+      <!-- Selected Image Details Directly Below Viewer -->
+      <div class="batch-detail-strip" id="batchDetailStrip">
+        <div class="batch-detail-cell">
+          <div class="batch-detail-lbl">SELECTED IMAGE</div>
+          <div class="batch-detail-val" id="bDetFilename">&ndash;</div>
+        </div>
+        <div class="batch-detail-cell">
+          <div class="batch-detail-lbl">INSPECTION VERDICT</div>
+          <div class="batch-detail-val" id="bDetVerdict">&ndash;</div>
+        </div>
+        <div class="batch-detail-cell">
+          <div class="batch-detail-lbl">ANOMALY SCORE</div>
+          <div class="batch-detail-val" id="bDetScore">&ndash;</div>
+        </div>
+        <div class="batch-detail-cell">
+          <div class="batch-detail-lbl">DEVIATION REGIONS</div>
+          <div class="batch-detail-val" id="bDetRegions">&ndash;</div>
+        </div>
+        <div class="batch-detail-cell">
+          <div class="batch-detail-lbl">DIMENSIONS</div>
+          <div class="batch-detail-val" id="bDetDimensions">&ndash;</div>
+        </div>
+        <div class="batch-detail-cell">
+          <div class="batch-detail-lbl">PROCESSING TIME</div>
+          <div class="batch-detail-val" id="bDetLatency">&ndash;</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 2. CONSOLIDATED RESULTS TABLE -->
+    <section class="batch-table-section">
+      <div class="batch-section-header">
+        <span class="table-title">CONSOLIDATED BATCH RESULTS</span>
+        <span class="batch-section-sub">CLICK ROW OR THUMBNAIL TO INSPECT</span>
+      </div>
+      <div class="table-wrap">
+        <table aria-label="Batch inspection items table">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>FILENAME</th>
+              <th>STATUS</th>
+              <th>VERDICT</th>
+              <th class="num-right">ANOMALY SCORE</th>
+              <th class="num-right">DEVIATION REGIONS</th>
+              <th class="num-right">ROUND TRIP</th>
+              <th>ACTION</th>
+            </tr>
+          </thead>
+          <tbody id="batchTableBody">
+            <tr>
+              <td colspan="8" class="empty-cell">NO BATCH ITEMS LOADED</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="batch-bottom-bar">
+        <button type="button" id="btnBatchExportCsvBottom" class="btn btn-accent" disabled>DOWNLOAD CSV RESULTS (ALL ITEMS)</button>
+      </div>
+    </section>
   </div>
 
   <!-- Model Card & Provenance Specifications (Feature 6) -->
@@ -944,6 +1284,7 @@
 
   // Batch Processor state
   let batchItems = [];
+  window.batchItems = batchItems;
   let batchWorkers = 0;
   let batchCancelled = false;
 
@@ -1687,7 +2028,31 @@
 
   btnPrint.addEventListener("click", () => window.print());
 
-  // Feature 5: Batch Mode Processor
+  // Batch Mode Interactive Suite
+  let selectedBatchItemId = null;
+  let batchViewerBitmap = null;
+  let batchViewerItem = null;
+
+  const batchGallerySection = document.getElementById("batchGallerySection");
+  const batchGallery = document.getElementById("batchGallery");
+  const batchGallerySummary = document.getElementById("batchGallerySummary");
+  const batchViewerSection = document.getElementById("batchViewerSection");
+  const batchViewerFilename = document.getElementById("batchViewerFilename");
+  const batchViewerCanvas = document.getElementById("batchViewerCanvas");
+  const batchStageMsg = document.getElementById("batchStageMsg");
+  const batchToggleHeatmap = document.getElementById("batchToggleHeatmap");
+  const batchToggleBoxes = document.getElementById("batchToggleBoxes");
+  const batchHeatmapOpacity = document.getElementById("batchHeatmapOpacity");
+  const batchOpacityVal = document.getElementById("batchOpacityVal");
+
+  const bDetFilename = document.getElementById("bDetFilename");
+  const bDetVerdict = document.getElementById("bDetVerdict");
+  const bDetScore = document.getElementById("bDetScore");
+  const bDetRegions = document.getElementById("bDetRegions");
+  const bDetDimensions = document.getElementById("bDetDimensions");
+  const bDetLatency = document.getElementById("bDetLatency");
+  const btnBatchExportCsvBottom = document.getElementById("btnBatchExportCsvBottom");
+
   btnBatchSelect.addEventListener("click", () => batchFileInput.click());
   batchDropzone.addEventListener("click", () => batchFileInput.click());
 
@@ -1705,10 +2070,39 @@
     if (e.target.files) addBatchFiles(e.target.files);
   });
 
-  function addBatchFiles(fileList) {
+  async function generateThumbnail(file) {
+    try {
+      const bmp = await createImageBitmap(file);
+      const thumbCanvas = document.createElement("canvas");
+      const thumbSize = 96;
+      thumbCanvas.width = thumbSize;
+      thumbCanvas.height = thumbSize;
+      const ctx = thumbCanvas.getContext("2d");
+      ctx.fillStyle = "#0a0e0a";
+      ctx.fillRect(0, 0, thumbSize, thumbSize);
+
+      const scale = Math.min(thumbSize / bmp.width, thumbSize / bmp.height);
+      const w = Math.round(bmp.width * scale);
+      const h = Math.round(bmp.height * scale);
+      const px = Math.floor((thumbSize - w) / 2);
+      const py = Math.floor((thumbSize - h) / 2);
+      ctx.drawImage(bmp, px, py, w, h);
+
+      return {
+        thumbUrl: thumbCanvas.toDataURL("image/jpeg", 0.75),
+        origWidth: bmp.width,
+        origHeight: bmp.height
+      };
+    } catch {
+      return { thumbUrl: null, origWidth: null, origHeight: null };
+    }
+  }
+
+  async function addBatchFiles(fileList) {
     const arr = Array.from(fileList).slice(0, 50 - batchItems.length);
-    arr.forEach((file, idx) => {
-      batchItems.push({
+    for (let idx = 0; idx < arr.length; idx++) {
+      const file = arr[idx];
+      const item = {
         id: `batch-${Date.now()}-${idx}-${Math.random().toString(36).substring(2, 6)}`,
         file,
         name: file.name,
@@ -1717,11 +2111,26 @@
         verdict: null,
         score: null,
         roundTripMs: null,
+        inferenceMs: 0,
         regionsCount: 0,
+        regions: [],
+        rawDetections: [],
+        thumbnailUrl: null,
+        origWidth: null,
+        origHeight: null,
         error: null
-      });
-    });
+      };
+      batchItems.push(item);
 
+      generateThumbnail(file).then(({ thumbUrl, origWidth, origHeight }) => {
+        item.thumbnailUrl = thumbUrl;
+        item.origWidth = origWidth;
+        item.origHeight = origHeight;
+        renderBatchGallery();
+      });
+    }
+
+    renderBatchGallery();
     renderBatchTable();
     btnBatchRun.disabled = batchItems.length === 0;
   }
@@ -1735,6 +2144,7 @@
         i.error = "Cancelled by user";
       }
     });
+    renderBatchGallery();
     renderBatchTable();
   });
 
@@ -1766,12 +2176,14 @@
       btnBatchRun.disabled = false;
       btnBatchCancel.disabled = true;
       btnBatchExportCsv.disabled = false;
+      btnBatchExportCsvBottom.disabled = false;
       btnBatchExportJson.disabled = false;
     }
   }
 
   async function processBatchItem(item) {
     item.status = "inspecting";
+    renderBatchGallery();
     renderBatchTable();
 
     try {
@@ -1783,6 +2195,23 @@
       }
 
       const bmp = await createImageBitmap(item.file);
+      item.origWidth = bmp.width;
+      item.origHeight = bmp.height;
+
+      if (!item.thumbnailUrl) {
+        const thumbCanvas = document.createElement("canvas");
+        const thumbSize = 96;
+        thumbCanvas.width = thumbSize;
+        thumbCanvas.height = thumbSize;
+        const ctx = thumbCanvas.getContext("2d");
+        ctx.fillStyle = "#0a0e0a";
+        ctx.fillRect(0, 0, thumbSize, thumbSize);
+        const scale = Math.min(thumbSize / bmp.width, thumbSize / bmp.height);
+        const w = Math.round(bmp.width * scale), h = Math.round(bmp.height * scale);
+        ctx.drawImage(bmp, Math.floor((thumbSize - w) / 2), Math.floor((thumbSize - h) / 2), w, h);
+        item.thumbnailUrl = thumbCanvas.toDataURL("image/jpeg", 0.75);
+      }
+
       const S = 640;
       const scale = Math.min(S / bmp.width, S / bmp.height);
       const w = Math.round(bmp.width * scale), h = Math.round(bmp.height * scale);
@@ -1804,27 +2233,272 @@
         body: blob
       });
 
-      if (!res.ok) throw new Error(`Server returned ${res.status}`);
+      if (!res.ok) {
+        if (res.status === 413) throw new Error("Payload too large (413)");
+        throw new Error(`Server error ${res.status}`);
+      }
       const data = await res.json();
       const rt = Math.round(performance.now() - t0);
 
-      const dets = data.detections || [];
+      const rawDets = data.detections || [];
       const threshold = Number(confSlider.value);
-      const peak = dets.length > 0 ? Math.max(...dets.map(d => d.confidence)) : 0.0;
+
+      const derivedRegions = rawDets.map((d, idx) => {
+        const x1 = Math.round(Math.max(0, (d.box[0] - padX) / scale));
+        const y1 = Math.round(Math.max(0, (d.box[1] - padY) / scale));
+        const x2 = Math.round(Math.min(bmp.width, Math.max(0, (d.box[2] - padX) / scale)));
+        const y2 = Math.round(Math.min(bmp.height, Math.max(0, (d.box[3] - padY) / scale)));
+        return {
+          id: idx + 1,
+          score: d.confidence,
+          box_px: [x1, y1, x2, y2],
+          centroid_px: [Math.round((x1 + x2) / 2), Math.round((y1 + y2) / 2)],
+          width_px: Math.max(0, x2 - x1),
+          height_px: Math.max(0, y2 - y1),
+          area_px: Math.max(0, (x2 - x1) * (y2 - y1))
+        };
+      });
+
+      const peak = derivedRegions.length > 0 ? Math.max(...derivedRegions.map(r => r.score)) : 0.0;
       const dec = computeDecision(peak, modelMeta, { pass: true });
 
       item.score = peak;
       item.verdict = dec.verdict;
       item.roundTripMs = rt;
-      item.regionsCount = dets.filter(d => d.confidence >= threshold).length;
+      item.inferenceMs = data.inference_ms || 0;
+      item.rawDetections = rawDets;
+      item.regions = derivedRegions.filter(r => r.score >= threshold);
+      item.regionsCount = item.regions.length;
       item.status = "done";
+
+      if (!selectedBatchItemId) {
+        selectBatchItem(item.id);
+      } else if (selectedBatchItemId === item.id) {
+        renderBatchViewer(item);
+      }
     } catch (err) {
       item.status = "failed";
       item.error = err.message || "Failed";
+      if (selectedBatchItemId === item.id) {
+        renderBatchViewer(item);
+      }
     }
 
+    renderBatchGallery();
     renderBatchTable();
   }
+
+  function renderBatchGallery() {
+    if (batchItems.length === 0) {
+      batchGallerySection.hidden = true;
+      return;
+    }
+
+    batchGallerySection.hidden = false;
+    let done = 0, failed = 0;
+    batchItems.forEach(i => {
+      if (i.status === "done") done++;
+      if (i.status === "failed") failed++;
+    });
+
+    batchGallerySummary.textContent = `${done} / ${batchItems.length} ANALYZED \u00b7 ${failed} FAILED`;
+    batchGallery.innerHTML = "";
+
+    batchItems.forEach(item => {
+      const thumb = document.createElement("div");
+      thumb.className = `batch-thumb-item ${item.id === selectedBatchItemId ? "is-selected" : ""}`;
+      thumb.setAttribute("role", "tab");
+      thumb.setAttribute("aria-selected", item.id === selectedBatchItemId ? "true" : "false");
+      thumb.tabIndex = 0;
+      thumb.title = `${item.name} (${item.status.toUpperCase()})`;
+
+      let badgeClass = "badge-queued";
+      let badgeText = item.status;
+      if (item.status === "done") {
+        badgeText = item.verdict || "DONE";
+        badgeClass = item.verdict === "defect" ? "badge-defect" : (item.verdict === "borderline" ? "badge-borderline" : "badge-pass");
+      } else if (item.status === "failed") {
+        badgeClass = "badge-failed";
+        badgeText = "FAIL";
+      } else if (item.status === "inspecting") {
+        badgeClass = "badge-inspecting";
+        badgeText = "RUN";
+      }
+
+      thumb.innerHTML = `
+        <div class="batch-thumb-img-box">
+          ${item.thumbnailUrl ? `<img src="${item.thumbnailUrl}" alt="${item.name}">` : `<div style="color:var(--muted); font-size:10px;">LOADING</div>`}
+          <span class="batch-thumb-status-badge ${badgeClass}">${badgeText}</span>
+        </div>
+        <div class="batch-thumb-filename" title="${item.name}">${item.name}</div>
+      `;
+
+      thumb.addEventListener("click", () => selectBatchItem(item.id));
+      thumb.addEventListener("keydown", (e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          selectBatchItem(item.id);
+        }
+      });
+      batchGallery.appendChild(thumb);
+    });
+  }
+
+  function selectBatchItem(id) {
+    selectedBatchItemId = id;
+    const item = batchItems.find(i => i.id === id);
+    if (!item) return;
+
+    const allThumbs = batchGallery.querySelectorAll(".batch-thumb-item");
+    batchItems.forEach((it, idx) => {
+      if (allThumbs[idx]) {
+        if (it.id === id) {
+          allThumbs[idx].classList.add("is-selected");
+          allThumbs[idx].setAttribute("aria-selected", "true");
+          allThumbs[idx].scrollIntoView({ behavior: "smooth", block: "nearest", inline: "nearest" });
+        } else {
+          allThumbs[idx].classList.remove("is-selected");
+          allThumbs[idx].setAttribute("aria-selected", "false");
+        }
+      }
+    });
+
+    const allRows = batchTableBody.querySelectorAll(".batch-table-row");
+    batchItems.forEach((it, idx) => {
+      if (allRows[idx]) {
+        if (it.id === id) allRows[idx].classList.add("is-selected-row");
+        else allRows[idx].classList.remove("is-selected-row");
+      }
+    });
+
+    renderBatchViewer(item);
+  }
+
+  async function renderBatchViewer(item) {
+    batchViewerSection.hidden = false;
+    batchViewerFilename.textContent = item.name;
+    bDetFilename.textContent = item.name;
+
+    if (item.status === "done") {
+      batchStageMsg.hidden = true;
+      batchViewerCanvas.hidden = false;
+
+      const vUpper = (item.verdict || "UNKNOWN").toUpperCase();
+      let vColor = "var(--ink)";
+      if (item.verdict === "defect") vColor = "var(--accent)";
+      else if (item.verdict === "borderline") vColor = "var(--verdict-borderline)";
+      else if (item.verdict === "pass") vColor = "var(--verdict-pass)";
+
+      bDetVerdict.innerHTML = `<span style="color:${vColor}">${vUpper}</span>`;
+      bDetScore.textContent = item.score !== null ? item.score.toFixed(4) : "\u2013";
+      bDetRegions.textContent = `${item.regionsCount} region${item.regionsCount === 1 ? "" : "s"} detected`;
+      bDetDimensions.textContent = item.origWidth && item.origHeight ? `${item.origWidth} \u00d7 ${item.origHeight} px` : "\u2013";
+      bDetLatency.textContent = `${item.roundTripMs} ms (infer: ${item.inferenceMs.toFixed(1)} ms)`;
+
+      try {
+        batchViewerItem = item;
+        batchViewerBitmap = await createImageBitmap(item.file);
+        drawBatchViewerCanvas();
+      } catch {
+        batchStageMsg.textContent = "COULD NOT RENDER IMAGE PREVIEW";
+        batchStageMsg.hidden = false;
+      }
+    } else if (item.status === "failed") {
+      batchViewerCanvas.hidden = true;
+      batchStageMsg.innerHTML = `<div style="color:#ef4444; font-weight:600; margin-bottom:6px;">INSPECTION FAILED</div><div style="font-size:12px; color:var(--muted);">${item.error || "An unexpected error occurred."}</div>`;
+      batchStageMsg.hidden = false;
+
+      bDetVerdict.innerHTML = `<span style="color:#ef4444">FAILED</span>`;
+      bDetScore.textContent = "\u2013";
+      bDetRegions.textContent = "\u2013";
+      bDetDimensions.textContent = "\u2013";
+      bDetLatency.textContent = item.error || "Inspection error";
+    } else {
+      batchViewerCanvas.hidden = true;
+      batchStageMsg.innerHTML = `<div>ANALYZING ${item.name}...</div>`;
+      batchStageMsg.hidden = false;
+
+      bDetVerdict.textContent = item.status.toUpperCase();
+      bDetScore.textContent = "\u2013";
+      bDetRegions.textContent = "\u2013";
+      bDetDimensions.textContent = "\u2013";
+      bDetLatency.textContent = "In progress...";
+    }
+  }
+
+  function drawBatchViewerCanvas() {
+    if (!batchViewerBitmap || !batchViewerItem) return;
+    const ctx = batchViewerCanvas.getContext("2d");
+    const bmp = batchViewerBitmap;
+    const item = batchViewerItem;
+
+    batchViewerCanvas.width = bmp.width;
+    batchViewerCanvas.height = bmp.height;
+
+    ctx.drawImage(bmp, 0, 0);
+
+    const W = batchViewerCanvas.width;
+    const scaleFactor = Math.max(1, W / 1000);
+    const baseLineWidth = Math.max(2, Math.round(scaleFactor * 2.5));
+    const fontSize = Math.max(12, Math.round(scaleFactor * 13));
+
+    const regions = item.regions || [];
+
+    if (batchToggleHeatmap.checked && regions.length > 0) {
+      const opacityMultiplier = parseFloat(batchHeatmapOpacity.value) || 0.75;
+      ctx.save();
+      regions.forEach(r => {
+        const cx = r.centroid_px[0];
+        const cy = r.centroid_px[1];
+        const rad = Math.max(r.width_px, r.height_px, 40) * 1.3;
+
+        const grad = ctx.createRadialGradient(cx, cy, 2, cx, cy, rad);
+        grad.addColorStop(0.0, `rgba(255, 90, 31, ${Math.min(1, r.score * opacityMultiplier)})`);
+        grad.addColorStop(0.4, `rgba(220, 38, 38, ${Math.min(1, r.score * opacityMultiplier * 0.75)})`);
+        grad.addColorStop(0.8, `rgba(126, 34, 206, ${Math.min(1, r.score * opacityMultiplier * 0.45)})`);
+        grad.addColorStop(1.0, "rgba(0, 0, 0, 0)");
+
+        ctx.fillStyle = grad;
+        ctx.beginPath();
+        ctx.arc(cx, cy, rad, 0, Math.PI * 2);
+        ctx.fill();
+      });
+      ctx.restore();
+    }
+
+    if (batchToggleBoxes.checked && regions.length > 0) {
+      ctx.font = `600 ${fontSize}px var(--font-mono)`;
+      ctx.textBaseline = "top";
+
+      regions.forEach(r => {
+        const [x1, y1, x2, y2] = r.box_px;
+        const bw = x2 - x1;
+        const bh = y2 - y1;
+
+        ctx.lineWidth = baseLineWidth;
+        ctx.strokeStyle = "#ff5a1f";
+        ctx.strokeRect(x1, y1, bw, bh);
+
+        const label = `#${r.id} (${r.score.toFixed(2)})`;
+        const tW = ctx.measureText(label).width;
+        const bH = fontSize + 4;
+        const bW = tW + 8;
+        const bY = y1 - bH < 0 ? y1 + 2 : y1 - bH;
+
+        ctx.fillStyle = "#ff5a1f";
+        ctx.fillRect(x1, bY, bW, bH);
+        ctx.fillStyle = "#ffffff";
+        ctx.fillText(label, x1 + 4, bY + 2);
+      });
+    }
+  }
+
+  batchToggleHeatmap.addEventListener("change", drawBatchViewerCanvas);
+  batchToggleBoxes.addEventListener("change", drawBatchViewerCanvas);
+  batchHeatmapOpacity.addEventListener("input", () => {
+    batchOpacityVal.textContent = Math.round(batchHeatmapOpacity.value * 100) + "%";
+    drawBatchViewerCanvas();
+  });
 
   function renderBatchTable() {
     bStatTotal.textContent = batchItems.length;
@@ -1849,61 +2523,130 @@
 
     if (batchItems.length === 0) {
       batchTableBody.innerHTML = `<tr><td colspan="8" class="empty-cell">NO BATCH ITEMS LOADED</td></tr>`;
+      btnBatchExportCsv.disabled = true;
+      btnBatchExportCsvBottom.disabled = true;
+      btnBatchExportJson.disabled = true;
       return;
     }
 
     batchTableBody.innerHTML = "";
     batchItems.forEach((item, idx) => {
       const tr = document.createElement("tr");
+      tr.className = `batch-table-row ${item.id === selectedBatchItemId ? "is-selected-row" : ""}`;
+      tr.tabIndex = 0;
+
+      let vColor = "inherit";
+      if (item.verdict === "defect") vColor = "var(--accent)";
+      else if (item.verdict === "borderline") vColor = "var(--verdict-borderline)";
+      else if (item.verdict === "pass") vColor = "var(--verdict-pass)";
+      else if (item.status === "failed") vColor = "#ef4444";
+
       tr.innerHTML = `
         <td>${idx + 1}</td>
         <td><strong>${item.name}</strong></td>
         <td>${item.status.toUpperCase()}</td>
-        <td style="font-weight:600; color:${item.verdict === 'defect' ? 'var(--accent)' : (item.verdict === 'pass' ? 'var(--verdict-pass)' : 'inherit')}">${item.verdict ? item.verdict.toUpperCase() : '\u2013'}</td>
-        <td class="num-right">${item.score !== null ? item.score.toFixed(4) : '\u2013'}</td>
-        <td class="num-right">${item.regionsCount}</td>
-        <td class="num-right">${item.roundTripMs !== null ? item.roundTripMs + ' ms' : '\u2013'}</td>
-        <td><button type="button" class="btn btn-outline" style="min-height:26px; padding:2px 8px; font-size:11px;" onclick="window.loadBatchItemIntoMain('${item.id}')">VIEW</button></td>
+        <td style="font-weight:600; color:${vColor}">${item.verdict ? item.verdict.toUpperCase() : (item.status === "failed" ? "FAIL" : "\u2013")}</td>
+        <td class="num-right">${item.score !== null ? item.score.toFixed(4) : "\u2013"}</td>
+        <td class="num-right">${item.status === "done" ? item.regionsCount : "\u2013"}</td>
+        <td class="num-right">${item.roundTripMs !== null ? item.roundTripMs + " ms" : "\u2013"}</td>
+        <td><button type="button" class="btn btn-outline" style="min-height:26px; padding:2px 8px; font-size:11px;">${item.id === selectedBatchItemId ? "SELECTED" : "INSPECT"}</button></td>
       `;
+
+      tr.addEventListener("click", () => selectBatchItem(item.id));
+      tr.addEventListener("keydown", (e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          selectBatchItem(item.id);
+        }
+      });
       batchTableBody.appendChild(tr);
     });
+
+    btnBatchExportCsv.disabled = false;
+    btnBatchExportCsvBottom.disabled = false;
+    btnBatchExportJson.disabled = false;
   }
 
-  window.loadBatchItemIntoMain = function(id) {
-    const item = batchItems.find(i => i.id === id);
-    if (!item || !item.file) return;
-    tabSingle.click();
-    handleSelectedFile(item.file);
-  };
-
-  btnBatchExportCsv.addEventListener("click", () => {
+  function downloadBatchCsv() {
     if (batchItems.length === 0) return;
-    const headers = ["ID", "Filename", "Status", "Verdict", "Score", "Regions", "RoundTripMs", "Error"];
+    const headers = [
+      "Filename",
+      "Verdict",
+      "Anomaly_Score",
+      "Deviation_Regions",
+      "Status",
+      "Round_Trip_Ms",
+      "Error",
+      "Model_Version",
+      "Model_Commit",
+      "Timestamp"
+    ];
+
+    const version = modelMeta?.model?.version ?? "2.1.0";
+    const commit = modelMeta?.model?.commit ?? "7731565";
+    const ts = new Date().toISOString();
+
+    const escapeCsv = (str) => {
+      if (str === null || str === undefined) return '""';
+      const s = String(str);
+      if (s.includes('"') || s.includes(',') || s.includes('\n') || s.includes('\r')) {
+        return `"${s.replace(/"/g, '""')}"`;
+      }
+      return `"${s}"`;
+    };
+
     const rows = [headers.join(",")];
-    batchItems.forEach(i => {
-      rows.push([i.id, `"${i.name}"`, i.status, i.verdict || "", i.score !== null ? i.score.toFixed(4) : "", i.regionsCount, i.roundTripMs || "", `"${i.error || ""}"`].join(","));
-    });
+    for (const item of batchItems) {
+      rows.push([
+        escapeCsv(item.name),
+        escapeCsv(item.verdict ? item.verdict.toUpperCase() : (item.status === "failed" ? "FAILED" : "NONE")),
+        item.score !== null ? item.score.toFixed(4) : "",
+        item.status === "done" ? item.regionsCount : "",
+        escapeCsv(item.status.toUpperCase()),
+        item.roundTripMs !== null ? item.roundTripMs : "",
+        escapeCsv(item.error || ""),
+        escapeCsv(version),
+        escapeCsv(commit),
+        escapeCsv(ts)
+      ].join(","));
+    }
+
     const blob = new Blob([rows.join("\r\n")], { type: "text/csv;charset=utf-8;" });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
-    a.download = `pcbguard_batch_${Date.now()}.csv`;
+    a.download = "pcb_batch_inspection_results.csv";
+    document.body.appendChild(a);
     a.click();
-    URL.revokeObjectURL(a.href);
-  });
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  }
+
+  btnBatchExportCsv.addEventListener("click", downloadBatchCsv);
+  btnBatchExportCsvBottom.addEventListener("click", downloadBatchCsv);
 
   btnBatchExportJson.addEventListener("click", () => {
     if (batchItems.length === 0) return;
     const data = {
       model: modelMeta?.model,
       exportedAt: new Date().toISOString(),
-      items: batchItems.map(i => ({ name: i.name, status: i.status, verdict: i.verdict, score: i.score, regions: i.regionsCount, roundTripMs: i.roundTripMs, error: i.error }))
+      items: batchItems.map(i => ({
+        name: i.name,
+        status: i.status,
+        verdict: i.verdict,
+        score: i.score,
+        regions: i.regionsCount,
+        roundTripMs: i.roundTripMs,
+        error: i.error
+      }))
     };
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
     a.download = `pcbguard_batch_${Date.now()}.json`;
+    document.body.appendChild(a);
     a.click();
-    URL.revokeObjectURL(a.href);
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
   });
 
   // Startup initialization

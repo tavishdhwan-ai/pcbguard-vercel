@@ -71,3 +71,4 @@ function decide(score, meta, qualityResult) {
 if (typeof module !== "undefined" && module.exports) {
   module.exports = { decide };
 }
+

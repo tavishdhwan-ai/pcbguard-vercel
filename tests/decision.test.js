@@ -62,3 +62,4 @@ test("Decision module - input quality failure override to cannot_inspect", () =>
   assert.strictEqual(res.verdict, "cannot_inspect");
   assert.strictEqual(res.reason, "Image severely blurred");
 });
+

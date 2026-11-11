@@ -29,3 +29,4 @@ test("Provenance bundle - builds complete traceable report record", () => {
   assert.strictEqual(bundle.timing.inferenceMs, 198.8);
   assert.strictEqual(bundle.qualityAudit.overrideApplied, false);
 });
+

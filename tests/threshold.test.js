@@ -43,3 +43,4 @@ test("Threshold explorer - returns null when validation arrays missing", () => {
   assert.strictEqual(computeThresholdMetrics(null, defectScores, 0.45), null);
   assert.strictEqual(computeThresholdMetrics(goodScores, [], 0.45), null);
 });
+

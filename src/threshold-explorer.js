@@ -61,3 +61,4 @@ function computeThresholdMetrics(goodScores, defectScores, threshold, defaultThr
 if (typeof module !== "undefined" && module.exports) {
   module.exports = { computeThresholdMetrics };
 }
+

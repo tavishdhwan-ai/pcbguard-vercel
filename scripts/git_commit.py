@@ -84,3 +84,4 @@ def commit(message, author="Tavish <tavishdhawan3103@gmail.com>"):
 if __name__ == "__main__":
     msg = sys.argv[1] if len(sys.argv) > 1 else "Update"
     commit(msg)
+

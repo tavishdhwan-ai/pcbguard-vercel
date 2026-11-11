@@ -42,3 +42,4 @@ function deriveDeviationRegions(detections, threshold = 0.45, imageWidth = 0, im
 if (typeof module !== "undefined" && module.exports) {
   module.exports = { deriveDeviationRegions };
 }
+
