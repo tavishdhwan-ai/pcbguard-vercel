@@ -18,6 +18,7 @@ class BatchProcessor {
     this.items = [];
     this.activeWorkers = 0;
     this.isCancelled = false;
+    this.isRunning = false;
     this.onUpdate = options.onUpdate || (() => {});
     this.onComplete = options.onComplete || (() => {});
   }
@@ -49,12 +50,15 @@ class BatchProcessor {
   }
 
   async run() {
+    if (this.isRunning) return;
     this.isCancelled = false;
+    this.isRunning = true;
     this._pump();
   }
 
   cancel() {
     this.isCancelled = true;
+    this.isRunning = false;
     for (const item of this.items) {
       if (item.status === "queued" || item.status === "inspecting") {
         item.status = "cancelled";
@@ -69,11 +73,26 @@ class BatchProcessor {
     if (!item) return;
     item.status = "queued";
     item.error = null;
+    this.isRunning = true;
+    this.isCancelled = false;
+    this._pump();
+  }
+
+  inspectSingle(itemId) {
+    const item = this.items.find(i => i.id === itemId);
+    if (!item) return;
+    item.status = "queued";
+    item.error = null;
+    this.isRunning = true;
+    this.isCancelled = false;
     this._pump();
   }
 
   async _pump() {
-    if (this.isCancelled) return;
+    if (this.isCancelled) {
+      this.isRunning = false;
+      return;
+    }
 
     while (this.activeWorkers < this.concurrency) {
       const nextItem = this.items.find(i => i.status === "queued");
@@ -87,6 +106,7 @@ class BatchProcessor {
     }
 
     if (this.activeWorkers === 0 && !this.items.some(i => i.status === "queued")) {
+      this.isRunning = false;
       this.onComplete(this.getSummary());
     }
   }
@@ -131,10 +151,16 @@ class BatchProcessor {
       }
     }
 
+    const completed = counts.done;
+    const failed = counts.failed;
+    const remaining = Math.max(0, this.items.length - (completed + failed));
+    const percent = this.items.length > 0 ? Math.round(((completed + failed) / this.items.length) * 100) : 0;
+
     return {
-      counts,
+      counts: { ...counts, completed, remaining, percent },
       verdicts,
-      items: this.items
+      items: this.items,
+      isRunning: this.isRunning
     };
   }
 

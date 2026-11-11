@@ -644,6 +644,42 @@
     flex-wrap: wrap;
   }
 
+  /* Batch Progress Bar */
+  .batch-progress-bar-wrap {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-top: 6px;
+    padding-top: 10px;
+    border-top: 1px dashed var(--line);
+  }
+
+  .batch-progress-track {
+    flex: 1;
+    height: 6px;
+    background: var(--bg);
+    border: 1px solid var(--line);
+    position: relative;
+    overflow: hidden;
+  }
+
+  .batch-progress-fill {
+    height: 100%;
+    background: var(--accent);
+    width: 0%;
+    transition: width 0.2s ease-out;
+  }
+
+  .batch-progress-pct {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--accent);
+    min-width: 40px;
+    text-align: right;
+  }
+
   .batch-dropzone {
     border: 2px dashed var(--line);
     padding: 28px 20px;
@@ -1124,21 +1160,31 @@
   <!-- BATCH MODE VIEW (Interactive Inspection Suite) -->
   <div id="batchView" class="batch-section" hidden>
     <div class="batch-controls">
-      <div class="batch-stats">
-        <div>TOTAL: <strong id="bStatTotal">0</strong>/50</div>
-        <div>ANALYZED: <strong id="bStatDone">0</strong></div>
-        <div>PASS: <strong id="bStatPass" style="color:var(--verdict-pass)">0</strong></div>
-        <div>BORDERLINE: <strong id="bStatBorder" style="color:var(--verdict-borderline)">0</strong></div>
-        <div>DEFECT: <strong id="bStatDefect" style="color:var(--accent)">0</strong></div>
-        <div>FAILED: <strong id="bStatFailed" style="color:#ef4444">0</strong></div>
+      <div style="display:flex; justify-content:space-between; align-items:center; width:100%; flex-wrap:wrap; gap:12px;">
+        <div class="batch-stats">
+          <div>TOTAL: <strong id="bStatTotal">0</strong>/50</div>
+          <div>COMPLETED: <strong id="bStatDone" style="color:var(--verdict-pass)">0</strong></div>
+          <div>FAILED: <strong id="bStatFailed" style="color:#ef4444">0</strong></div>
+          <div>REMAINING: <strong id="bStatRemaining">0</strong></div>
+          <div>PASS: <strong id="bStatPass" style="color:var(--verdict-pass)">0</strong></div>
+          <div>BORDERLINE: <strong id="bStatBorder" style="color:var(--verdict-borderline)">0</strong></div>
+          <div>DEFECT: <strong id="bStatDefect" style="color:var(--accent)">0</strong></div>
+        </div>
+        <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
+          <input type="file" id="batchFileInput" multiple accept="image/jpeg,image/png,image/webp">
+          <button type="button" id="btnBatchSelect" class="btn btn-outline">ADD FILES</button>
+          <button type="button" id="btnBatchRun" class="btn btn-accent" style="font-weight:700;" disabled>INSPECT ALL</button>
+          <button type="button" id="btnBatchCancel" class="btn btn-outline" disabled>CANCEL BATCH</button>
+          <button type="button" id="btnBatchExportCsv" class="btn btn-outline" disabled>DOWNLOAD CSV</button>
+          <button type="button" id="btnBatchExportJson" class="btn btn-outline" disabled>EXPORT JSON</button>
+        </div>
       </div>
-      <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
-        <input type="file" id="batchFileInput" multiple accept="image/jpeg,image/png,image/webp">
-        <button type="button" id="btnBatchSelect" class="btn btn-accent">ADD FILES</button>
-        <button type="button" id="btnBatchRun" class="btn" disabled>RUN BATCH</button>
-        <button type="button" id="btnBatchCancel" class="btn btn-outline" disabled>CANCEL</button>
-        <button type="button" id="btnBatchExportCsv" class="btn btn-accent" disabled>DOWNLOAD CSV</button>
-        <button type="button" id="btnBatchExportJson" class="btn btn-outline" disabled>EXPORT JSON</button>
+      <!-- Batch Progress Bar with Percentage -->
+      <div class="batch-progress-bar-wrap" id="batchProgressWrap">
+        <div class="batch-progress-track" aria-label="Batch inspection progress">
+          <div class="batch-progress-fill" id="batchProgressFill" style="width: 0%;"></div>
+        </div>
+        <span class="batch-progress-pct" id="batchProgressPct">0%</span>
       </div>
     </div>
 
@@ -2032,6 +2078,8 @@
   let selectedBatchItemId = null;
   let batchViewerBitmap = null;
   let batchViewerItem = null;
+  const BATCH_CONCURRENCY = 2; // Configurable internal concurrency limit (starts at 2)
+  let batchRunning = false;
 
   const batchGallerySection = document.getElementById("batchGallerySection");
   const batchGallery = document.getElementById("batchGallery");
@@ -2045,6 +2093,10 @@
   const batchHeatmapOpacity = document.getElementById("batchHeatmapOpacity");
   const batchOpacityVal = document.getElementById("batchOpacityVal");
 
+  const bStatRemaining = document.getElementById("bStatRemaining");
+  const batchProgressFill = document.getElementById("batchProgressFill");
+  const batchProgressPct = document.getElementById("batchProgressPct");
+
   const bDetFilename = document.getElementById("bDetFilename");
   const bDetVerdict = document.getElementById("bDetVerdict");
   const bDetScore = document.getElementById("bDetScore");
@@ -2052,6 +2104,18 @@
   const bDetDimensions = document.getElementById("bDetDimensions");
   const bDetLatency = document.getElementById("bDetLatency");
   const btnBatchExportCsvBottom = document.getElementById("btnBatchExportCsvBottom");
+
+  // Reusable offscreen canvas for high-performance letterboxing (eliminates DOM canvas creation garbage)
+  const sharedLetterboxCanvas = document.createElement("canvas");
+  sharedLetterboxCanvas.width = 640;
+  sharedLetterboxCanvas.height = 640;
+  const sharedLetterboxCtx = sharedLetterboxCanvas.getContext("2d", { willReadFrequently: false });
+
+  // Reusable offscreen canvas for miniature thumbnail generation
+  const sharedThumbCanvas = document.createElement("canvas");
+  sharedThumbCanvas.width = 96;
+  sharedThumbCanvas.height = 96;
+  const sharedThumbCtx = sharedThumbCanvas.getContext("2d", { willReadFrequently: false });
 
   btnBatchSelect.addEventListener("click", () => batchFileInput.click());
   batchDropzone.addEventListener("click", () => batchFileInput.click());
@@ -2070,31 +2134,22 @@
     if (e.target.files) addBatchFiles(e.target.files);
   });
 
-  async function generateThumbnail(file) {
+  async function generateThumbnailFromBitmap(bmp) {
     try {
-      const bmp = await createImageBitmap(file);
-      const thumbCanvas = document.createElement("canvas");
       const thumbSize = 96;
-      thumbCanvas.width = thumbSize;
-      thumbCanvas.height = thumbSize;
-      const ctx = thumbCanvas.getContext("2d");
-      ctx.fillStyle = "#0a0e0a";
-      ctx.fillRect(0, 0, thumbSize, thumbSize);
+      sharedThumbCtx.fillStyle = "#0a0e0a";
+      sharedThumbCtx.fillRect(0, 0, thumbSize, thumbSize);
 
       const scale = Math.min(thumbSize / bmp.width, thumbSize / bmp.height);
       const w = Math.round(bmp.width * scale);
       const h = Math.round(bmp.height * scale);
       const px = Math.floor((thumbSize - w) / 2);
       const py = Math.floor((thumbSize - h) / 2);
-      ctx.drawImage(bmp, px, py, w, h);
+      sharedThumbCtx.drawImage(bmp, px, py, w, h);
 
-      return {
-        thumbUrl: thumbCanvas.toDataURL("image/jpeg", 0.75),
-        origWidth: bmp.width,
-        origHeight: bmp.height
-      };
+      return sharedThumbCanvas.toDataURL("image/jpeg", 0.75);
     } catch {
-      return { thumbUrl: null, origWidth: null, origHeight: null };
+      return null;
     }
   }
 
@@ -2121,23 +2176,106 @@
         error: null
       };
       batchItems.push(item);
-
-      generateThumbnail(file).then(({ thumbUrl, origWidth, origHeight }) => {
-        item.thumbnailUrl = thumbUrl;
-        item.origWidth = origWidth;
-        item.origHeight = origHeight;
-        renderBatchGallery();
-      });
     }
 
     renderBatchGallery();
     renderBatchTable();
+    updateBatchProgress();
     btnBatchRun.disabled = batchItems.length === 0;
+
+    // Asynchronously generate initial thumbnails with debouncing
+    arr.forEach(async (file, idx) => {
+      const targetItem = batchItems[batchItems.length - arr.length + idx];
+      if (!targetItem) return;
+      try {
+        const bmp = await createImageBitmap(file);
+        targetItem.origWidth = bmp.width;
+        targetItem.origHeight = bmp.height;
+        targetItem.thumbnailUrl = await generateThumbnailFromBitmap(bmp);
+        updateBatchThumbnailElement(targetItem);
+      } catch {
+        // Handled gracefully during inspection
+      }
+    });
   }
 
-  btnBatchRun.addEventListener("click", runBatch);
-  btnBatchCancel.addEventListener("click", () => {
+  function updateBatchProgress() {
+    const total = batchItems.length;
+    let done = 0, failed = 0, pass = 0, border = 0, defect = 0;
+
+    batchItems.forEach(i => {
+      if (i.status === "done") {
+        done++;
+        if (i.verdict === "pass") pass++;
+        else if (i.verdict === "borderline") border++;
+        else if (i.verdict === "defect") defect++;
+      } else if (i.status === "failed") {
+        failed++;
+      }
+    });
+
+    const completed = done + failed;
+    const remaining = Math.max(0, total - completed);
+    const pct = total > 0 ? Math.round((completed / total) * 100) : 0;
+
+    bStatTotal.textContent = total;
+    bStatDone.textContent = done;
+    bStatFailed.textContent = failed;
+    if (bStatRemaining) bStatRemaining.textContent = remaining;
+    bStatPass.textContent = pass;
+    bStatBorder.textContent = border;
+    bStatDefect.textContent = defect;
+
+    if (batchProgressFill) batchProgressFill.style.width = `${pct}%`;
+    if (batchProgressPct) batchProgressPct.textContent = `${pct}%`;
+    if (batchGallerySummary) batchGallerySummary.textContent = `${done} / ${total} COMPLETED \u00b7 ${failed} FAILED`;
+
+    // Update Inspect All button text and state
+    if (batchRunning) {
+      btnBatchRun.disabled = true;
+      btnBatchRun.textContent = `INSPECTING (${completed}/${total})...`;
+      btnBatchCancel.disabled = false;
+    } else {
+      btnBatchRun.disabled = total === 0;
+      btnBatchRun.textContent = remaining === 0 && total > 0 ? "RE-INSPECT ALL" : "INSPECT ALL";
+      btnBatchCancel.disabled = true;
+    }
+  }
+
+  btnBatchRun.addEventListener("click", inspectAllBatch);
+  btnBatchCancel.addEventListener("click", cancelBatch);
+
+  async function inspectAllBatch() {
+    if (batchRunning) return; // Prevent duplicate batch submissions while a batch is already running
+
+    // Filter items to inspect: skip successfully inspected images unless all are done or user explicitly requests
+    const uninspected = batchItems.filter(i => i.status !== "done");
+    if (uninspected.length === 0 && batchItems.length > 0) {
+      // Re-inspect all if user clicked Re-Inspect All
+      batchItems.forEach(i => {
+        i.status = "queued";
+        i.error = null;
+      });
+    } else {
+      uninspected.forEach(i => {
+        if (i.status === "failed" || i.status === "cancelled") {
+          i.status = "queued";
+          i.error = null;
+        }
+      });
+    }
+
+    batchCancelled = false;
+    batchRunning = true;
+    renderBatchGallery();
+    renderBatchTable();
+    updateBatchProgress();
+    pumpBatchQueue();
+  }
+
+  function cancelBatch() {
     batchCancelled = true;
+    batchRunning = false;
     batchItems.forEach(i => {
       if (i.status === "queued" || i.status === "inspecting") {
         i.status = "cancelled";
@@ -2146,35 +2284,46 @@
     });
     renderBatchGallery();
     renderBatchTable();
-  });
-
-  async function runBatch() {
-    batchCancelled = false;
-    btnBatchRun.disabled = true;
-    btnBatchCancel.disabled = false;
-    pumpBatchQueue();
+    updateBatchProgress();
   }
+
+  window.inspectSingleBatchItem = async function(id) {
+    const item = batchItems.find(i => i.id === id);
+    if (!item || item.status === "inspecting") return;
+
+    item.status = "queued";
+    item.error = null;
+    batchCancelled = false;
+    renderBatchGallery();
+    renderBatchTable();
+    updateBatchProgress();
+
+    // Run pump to process this single queued item
+    pumpBatchQueue();
+  };
 
   function pumpBatchQueue() {
     if (batchCancelled) {
-      btnBatchCancel.disabled = true;
+      batchRunning = false;
+      updateBatchProgress();
       return;
     }
 
-    while (batchWorkers < 2) {
+    while (batchWorkers < BATCH_CONCURRENCY) {
       const item = batchItems.find(i => i.status === "queued");
       if (!item) break;
 
       batchWorkers++;
       processBatchItem(item).finally(() => {
         batchWorkers--;
+        updateBatchProgress();
         pumpBatchQueue();
       });
     }
 
     if (batchWorkers === 0 && !batchItems.some(i => i.status === "queued")) {
-      btnBatchRun.disabled = false;
-      btnBatchCancel.disabled = true;
+      batchRunning = false;
+      updateBatchProgress();
       btnBatchExportCsv.disabled = false;
       btnBatchExportCsvBottom.disabled = false;
       btnBatchExportJson.disabled = false;
@@ -2183,8 +2332,9 @@
 
   async function processBatchItem(item) {
     item.status = "inspecting";
-    renderBatchGallery();
-    renderBatchTable();
+    updateBatchThumbnailElement(item);
+    updateBatchTableRowElement(item);
+    updateBatchProgress();
 
     try {
       if (!/\.(jpe?g|png|webp)$/i.test(item.name)) {
@@ -2194,38 +2344,29 @@
         throw new Error("File exceeds 4.5 MB limit");
       }
 
+      // 1. Decode bitmap once
       const bmp = await createImageBitmap(item.file);
       item.origWidth = bmp.width;
       item.origHeight = bmp.height;
 
+      // 2. Fast thumbnail generation using reusable canvas
       if (!item.thumbnailUrl) {
-        const thumbCanvas = document.createElement("canvas");
-        const thumbSize = 96;
-        thumbCanvas.width = thumbSize;
-        thumbCanvas.height = thumbSize;
-        const ctx = thumbCanvas.getContext("2d");
-        ctx.fillStyle = "#0a0e0a";
-        ctx.fillRect(0, 0, thumbSize, thumbSize);
-        const scale = Math.min(thumbSize / bmp.width, thumbSize / bmp.height);
-        const w = Math.round(bmp.width * scale), h = Math.round(bmp.height * scale);
-        ctx.drawImage(bmp, Math.floor((thumbSize - w) / 2), Math.floor((thumbSize - h) / 2), w, h);
-        item.thumbnailUrl = thumbCanvas.toDataURL("image/jpeg", 0.75);
+        item.thumbnailUrl = await generateThumbnailFromBitmap(bmp);
       }
 
+      // 3. High-efficiency letterboxing on shared canvas
       const S = 640;
       const scale = Math.min(S / bmp.width, S / bmp.height);
       const w = Math.round(bmp.width * scale), h = Math.round(bmp.height * scale);
       const padX = Math.floor((S - w) / 2), padY = Math.floor((S - h) / 2);
 
-      const off = document.createElement("canvas");
-      off.width = S; off.height = S;
-      const g = off.getContext("2d");
-      g.fillStyle = "rgb(114,114,114)";
-      g.fillRect(0, 0, S, S);
-      g.drawImage(bmp, padX, padY, w, h);
+      sharedLetterboxCtx.fillStyle = "rgb(114,114,114)";
+      sharedLetterboxCtx.fillRect(0, 0, S, S);
+      sharedLetterboxCtx.drawImage(bmp, padX, padY, w, h);
 
-      const blob = await new Promise(r => off.toBlob(r, "image/jpeg", 0.95));
+      const blob = await new Promise(r => sharedLetterboxCanvas.toBlob(r, "image/jpeg", 0.95));
 
+      // 4. Send request
       const t0 = performance.now();
       const res = await fetch(`/api/detect?conf=${confSlider.value}`, {
         method: "POST",
@@ -2243,6 +2384,7 @@
       const rawDets = data.detections || [];
       const threshold = Number(confSlider.value);
 
+      // 5. Inverse coordinate transform
       const derivedRegions = rawDets.map((d, idx) => {
         const x1 = Math.round(Math.max(0, (d.box[0] - padX) / scale));
         const y1 = Math.round(Math.max(0, (d.box[1] - padY) / scale));
@@ -2271,6 +2413,7 @@
       item.regionsCount = item.regions.length;
       item.status = "done";
 
+      // Select first completed item automatically if none selected
       if (!selectedBatchItemId) {
         selectBatchItem(item.id);
       } else if (selectedBatchItemId === item.id) {
@@ -2284,8 +2427,73 @@
       }
     }
 
-    renderBatchGallery();
-    renderBatchTable();
+    updateBatchThumbnailElement(item);
+    updateBatchTableRowElement(item);
+    updateBatchProgress();
+  }
+
+  function updateBatchThumbnailElement(item) {
+    const el = document.getElementById(`thumb-${item.id}`);
+    if (!el) {
+      renderBatchGallery();
+      return;
+    }
+
+    let badgeClass = "badge-queued";
+    let badgeText = item.status.toUpperCase();
+    if (item.status === "done") {
+      badgeText = item.verdict || "DONE";
+      badgeClass = item.verdict === "defect" ? "badge-defect" : (item.verdict === "borderline" ? "badge-borderline" : "badge-pass");
+    } else if (item.status === "failed") {
+      badgeClass = "badge-failed";
+      badgeText = "FAIL";
+    } else if (item.status === "inspecting") {
+      badgeClass = "badge-inspecting";
+      badgeText = "RUN";
+    }
+
+    const imgBox = el.querySelector(".batch-thumb-img-box");
+    if (imgBox) {
+      imgBox.innerHTML = `
+        ${item.thumbnailUrl ? `<img src="${item.thumbnailUrl}" alt="${item.name}">` : `<div style="color:var(--muted); font-size:10px;">LOADING</div>`}
+        <span class="batch-thumb-status-badge ${badgeClass}">${badgeText}</span>
+      `;
+    }
+  }
+
+  function updateBatchTableRowElement(item) {
+    const tr = document.getElementById(`row-${item.id}`);
+    if (!tr) {
+      renderBatchTable();
+      return;
+    }
+
+    let vColor = "inherit";
+    if (item.verdict === "defect") vColor = "var(--accent)";
+    else if (item.verdict === "borderline") vColor = "var(--verdict-borderline)";
+    else if (item.verdict === "pass") vColor = "var(--verdict-pass)";
+    else if (item.status === "failed") vColor = "#ef4444";
+
+    let actionBtnHtml = "";
+    if (item.status === "queued") {
+      actionBtnHtml = `<button type="button" class="btn btn-outline" style="min-height:26px; padding:2px 8px; font-size:11px;" onclick="event.stopPropagation(); window.inspectSingleBatchItem('${item.id}');">INSPECT</button>`;
+    } else if (item.status === "inspecting") {
+      actionBtnHtml = `<button type="button" class="btn btn-outline" style="min-height:26px; padding:2px 8px; font-size:11px;" disabled>RUNNING...</button>`;
+    } else if (item.status === "failed") {
+      actionBtnHtml = `<button type="button" class="btn btn-outline" style="min-height:26px; padding:2px 8px; font-size:11px; color:#ef4444; border-color:#ef4444;" onclick="event.stopPropagation(); window.inspectSingleBatchItem('${item.id}');">RETRY</button>`;
+    } else {
+      actionBtnHtml = `<button type="button" class="btn btn-outline" style="min-height:26px; padding:2px 8px; font-size:11px;" onclick="event.stopPropagation(); window.selectBatchItem('${item.id}');">${item.id === selectedBatchItemId ? "VIEWING" : "VIEW"}</button>`;
+    }
+
+    tr.className = `batch-table-row ${item.id === selectedBatchItemId ? "is-selected-row" : ""}`;
+    tr.querySelector(".col-status").textContent = item.status.toUpperCase();
+    const vCell = tr.querySelector(".col-verdict");
+    vCell.style.color = vColor;
+    vCell.textContent = item.verdict ? item.verdict.toUpperCase() : (item.status === "failed" ? "FAIL" : "\u2013");
+    tr.querySelector(".col-score").textContent = item.score !== null ? item.score.toFixed(4) : "\u2013";
+    tr.querySelector(".col-regions").textContent = item.status === "done" ? item.regionsCount : "\u2013";
+    tr.querySelector(".col-rt").textContent = item.roundTripMs !== null ? item.roundTripMs + " ms" : "\u2013";
+    tr.querySelector(".col-action").innerHTML = actionBtnHtml;
   }
 
   function renderBatchGallery() {
@@ -2295,17 +2503,11 @@
     }
 
     batchGallerySection.hidden = false;
-    let done = 0, failed = 0;
-    batchItems.forEach(i => {
-      if (i.status === "done") done++;
-      if (i.status === "failed") failed++;
-    });
-
-    batchGallerySummary.textContent = `${done} / ${batchItems.length} ANALYZED \u00b7 ${failed} FAILED`;
     batchGallery.innerHTML = "";
 
     batchItems.forEach(item => {
       const thumb = document.createElement("div");
+      thumb.id = `thumb-${item.id}`;
       thumb.className = `batch-thumb-item ${item.id === selectedBatchItemId ? "is-selected" : ""}`;
       thumb.setAttribute("role", "tab");
       thumb.setAttribute("aria-selected", item.id === selectedBatchItemId ? "true" : "false");
@@ -2313,7 +2515,7 @@
       thumb.title = `${item.name} (${item.status.toUpperCase()})`;
 
       let badgeClass = "badge-queued";
-      let badgeText = item.status;
+      let badgeText = item.status.toUpperCase();
       if (item.status === "done") {
         badgeText = item.verdict || "DONE";
         badgeClass = item.verdict === "defect" ? "badge-defect" : (item.verdict === "borderline" ? "badge-borderline" : "badge-pass");
@@ -2327,7 +2529,7 @@
 
       thumb.innerHTML = `
         <div class="batch-thumb-img-box">
-          ${item.thumbnailUrl ? `<img src="${item.thumbnailUrl}" alt="${item.name}">` : `<div style="color:var(--muted); font-size:10px;">LOADING</div>`}
+          ${item.thumbnailUrl ? `<img src="${item.thumbnailUrl}" alt="${item.name}">` : `<div style="color:var(--muted); font-size:10px;">QUEUED</div>`}
           <span class="batch-thumb-status-badge ${badgeClass}">${badgeText}</span>
         </div>
         <div class="batch-thumb-filename" title="${item.name}">${item.name}</div>
@@ -2349,30 +2551,30 @@
     const item = batchItems.find(i => i.id === id);
     if (!item) return;
 
-    const allThumbs = batchGallery.querySelectorAll(".batch-thumb-item");
-    batchItems.forEach((it, idx) => {
-      if (allThumbs[idx]) {
+    // Update active highlight classes
+    batchItems.forEach(it => {
+      const thumbEl = document.getElementById(`thumb-${it.id}`);
+      if (thumbEl) {
         if (it.id === id) {
-          allThumbs[idx].classList.add("is-selected");
-          allThumbs[idx].setAttribute("aria-selected", "true");
-          allThumbs[idx].scrollIntoView({ behavior: "smooth", block: "nearest", inline: "nearest" });
+          thumbEl.classList.add("is-selected");
+          thumbEl.setAttribute("aria-selected", "true");
+          thumbEl.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "nearest" });
         } else {
-          allThumbs[idx].classList.remove("is-selected");
-          allThumbs[idx].setAttribute("aria-selected", "false");
+          thumbEl.classList.remove("is-selected");
+          thumbEl.setAttribute("aria-selected", "false");
         }
       }
-    });
 
-    const allRows = batchTableBody.querySelectorAll(".batch-table-row");
-    batchItems.forEach((it, idx) => {
-      if (allRows[idx]) {
-        if (it.id === id) allRows[idx].classList.add("is-selected-row");
-        else allRows[idx].classList.remove("is-selected-row");
+      const rowEl = document.getElementById(`row-${it.id}`);
+      if (rowEl) {
+        if (it.id === id) rowEl.classList.add("is-selected-row");
+        else rowEl.classList.remove("is-selected-row");
       }
     });
 
     renderBatchViewer(item);
   }
+  window.selectBatchItem = selectBatchItem;
 
   async function renderBatchViewer(item) {
     batchViewerSection.hidden = false;
@@ -2501,26 +2703,6 @@
   });
 
   function renderBatchTable() {
-    bStatTotal.textContent = batchItems.length;
-    let done = 0, pass = 0, border = 0, defect = 0, failed = 0;
-
-    batchItems.forEach(i => {
-      if (i.status === "done") {
-        done++;
-        if (i.verdict === "pass") pass++;
-        else if (i.verdict === "borderline") border++;
-        else if (i.verdict === "defect") defect++;
-      } else if (i.status === "failed") {
-        failed++;
-      }
-    });
-
-    bStatDone.textContent = done;
-    bStatPass.textContent = pass;
-    bStatBorder.textContent = border;
-    bStatDefect.textContent = defect;
-    bStatFailed.textContent = failed;
-
     if (batchItems.length === 0) {
       batchTableBody.innerHTML = `<tr><td colspan="8" class="empty-cell">NO BATCH ITEMS LOADED</td></tr>`;
       btnBatchExportCsv.disabled = true;
@@ -2532,6 +2714,7 @@
     batchTableBody.innerHTML = "";
     batchItems.forEach((item, idx) => {
       const tr = document.createElement("tr");
+      tr.id = `row-${item.id}`;
       tr.className = `batch-table-row ${item.id === selectedBatchItemId ? "is-selected-row" : ""}`;
       tr.tabIndex = 0;
 
@@ -2541,15 +2724,26 @@
       else if (item.verdict === "pass") vColor = "var(--verdict-pass)";
       else if (item.status === "failed") vColor = "#ef4444";
 
+      let actionBtnHtml = "";
+      if (item.status === "queued") {
+        actionBtnHtml = `<button type="button" class="btn btn-outline" style="min-height:26px; padding:2px 8px; font-size:11px;" onclick="event.stopPropagation(); window.inspectSingleBatchItem('${item.id}');">INSPECT</button>`;
+      } else if (item.status === "inspecting") {
+        actionBtnHtml = `<button type="button" class="btn btn-outline" style="min-height:26px; padding:2px 8px; font-size:11px;" disabled>RUNNING...</button>`;
+      } else if (item.status === "failed") {
+        actionBtnHtml = `<button type="button" class="btn btn-outline" style="min-height:26px; padding:2px 8px; font-size:11px; color:#ef4444; border-color:#ef4444;" onclick="event.stopPropagation(); window.inspectSingleBatchItem('${item.id}');">RETRY</button>`;
+      } else {
+        actionBtnHtml = `<button type="button" class="btn btn-outline" style="min-height:26px; padding:2px 8px; font-size:11px;" onclick="event.stopPropagation(); window.selectBatchItem('${item.id}');">${item.id === selectedBatchItemId ? "VIEWING" : "VIEW"}</button>`;
+      }
+
       tr.innerHTML = `
         <td>${idx + 1}</td>
         <td><strong>${item.name}</strong></td>
-        <td>${item.status.toUpperCase()}</td>
-        <td style="font-weight:600; color:${vColor}">${item.verdict ? item.verdict.toUpperCase() : (item.status === "failed" ? "FAIL" : "\u2013")}</td>
-        <td class="num-right">${item.score !== null ? item.score.toFixed(4) : "\u2013"}</td>
-        <td class="num-right">${item.status === "done" ? item.regionsCount : "\u2013"}</td>
-        <td class="num-right">${item.roundTripMs !== null ? item.roundTripMs + " ms" : "\u2013"}</td>
-        <td><button type="button" class="btn btn-outline" style="min-height:26px; padding:2px 8px; font-size:11px;">${item.id === selectedBatchItemId ? "SELECTED" : "INSPECT"}</button></td>
+        <td class="col-status">${item.status.toUpperCase()}</td>
+        <td class="col-verdict" style="font-weight:600; color:${vColor}">${item.verdict ? item.verdict.toUpperCase() : (item.status === "failed" ? "FAIL" : "\u2013")}</td>
+        <td class="col-score num-right">${item.score !== null ? item.score.toFixed(4) : "\u2013"}</td>
+        <td class="col-regions num-right">${item.status === "done" ? item.regionsCount : "\u2013"}</td>
+        <td class="col-rt num-right">${item.roundTripMs !== null ? item.roundTripMs + " ms" : "\u2013"}</td>
+        <td class="col-action">${actionBtnHtml}</td>
       `;
 
       tr.addEventListener("click", () => selectBatchItem(item.id));

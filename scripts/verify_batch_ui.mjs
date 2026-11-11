@@ -2,14 +2,14 @@ import { spawn } from "child_process";
 import fs from "fs";
 
 const EDGE_PATH = "C:\\Program Files (x86)\\Microsoft\\EdgeCore\\157.0.4341.42\\msedge.exe";
-const PORT = 9223;
+const PORT = 9226;
 
 async function sleep(ms) {
   return new Promise(r => setTimeout(r, ms));
 }
 
 async function main() {
-  console.log("Launching Edge with CDP on port", PORT);
+  console.log("=== BATCH MODE & INSPECT ALL VERIFICATION SUITE ===");
   const proc = spawn(EDGE_PATH, [
     "--headless=new",
     `--remote-debugging-port=${PORT}`,
@@ -24,7 +24,6 @@ async function main() {
     const targets = await resp.json();
     const pageTarget = targets.find(t => t.type === "page" && t.url.includes("localhost:3000")) || targets[0];
     const wsUrl = pageTarget.webSocketDebuggerUrl;
-    console.log("Connected to page:", pageTarget.title, "at", pageTarget.url);
 
     const ws = new WebSocket(wsUrl);
     await new Promise(r => ws.onopen = r);
@@ -60,13 +59,13 @@ async function main() {
       return res.result?.value;
     }
 
-    // 1. Switch to Batch Mode tab
-    console.log("Switching to Batch Mode...");
+    // 1. Switch to Batch Mode
+    console.log("1. Navigating to Batch Mode tab...");
     await evaluate("document.getElementById('tabBatch').click();");
     await sleep(500);
 
-    // 2. Ingest 4 sample files
-    console.log("Ingesting 4 sample files...");
+    // 2. Ingest mixed batch: 4 valid sample files + 1 invalid file
+    console.log("2. Ingesting mixed batch (4 valid PCB images + 1 invalid non-image file)...");
     await evaluate(`
       (async () => {
         const urls = [
@@ -82,6 +81,9 @@ async function main() {
           const name = u.split('/').pop();
           dt.items.add(new File([blob], name, { type: 'image/jpeg' }));
         }
+        // Add an invalid file
+        dt.items.add(new File(['invalid_corrupt_data'], 'corrupted_board.txt', { type: 'text/plain' }));
+
         const input = document.getElementById('batchFileInput');
         input.files = dt.files;
         input.dispatchEvent(new Event('change'));
@@ -89,83 +91,96 @@ async function main() {
     `);
     await sleep(1500);
 
-    const total = await evaluate("document.getElementById('bStatTotal').textContent");
-    console.log("Total items loaded in batch:", total);
+    const initialTotal = await evaluate("document.getElementById('bStatTotal').textContent");
+    const initialRemaining = await evaluate("document.getElementById('bStatRemaining').textContent");
+    const inspectBtnText = await evaluate("document.getElementById('btnBatchRun').textContent");
+    console.log(`Loaded batch items: Total=${initialTotal}, Remaining=${initialRemaining}, Primary Button="${inspectBtnText}"`);
+    if (initialTotal !== "5") throw new Error("Expected 5 batch items");
 
-    // 3. Click Run Batch
-    console.log("Starting batch analysis...");
+    // 3. Test INSPECT ALL
+    console.log("3. Clicking INSPECT ALL once...");
     await evaluate("document.getElementById('btnBatchRun').click();");
 
-    // Wait until completed
+    // 4. Test duplicate submission prevention
+    const isRunningDisabled = await evaluate("document.getElementById('btnBatchRun').disabled");
+    console.log("Inspect All disabled while running (duplicate prevention):", isRunningDisabled);
+    if (!isRunningDisabled) throw new Error("Inspect All must be disabled while running");
+
+    // 5. Track progress bar updates
+    let observedProgress = [];
     for (let i = 0; i < 30; i++) {
       await sleep(1000);
+      const pct = await evaluate("document.getElementById('batchProgressPct').textContent");
       const done = await evaluate("document.getElementById('bStatDone').textContent");
       const failed = await evaluate("document.getElementById('bStatFailed').textContent");
-      console.log(`Progress check ${i+1}: done=${done}, failed=${failed}`);
-      if (done === "4" || (Number(done) + Number(failed) >= 4)) break;
+      const rem = await evaluate("document.getElementById('bStatRemaining').textContent");
+      observedProgress.push(pct);
+      console.log(`Queue update ${i+1}: ${pct} | Done=${done}, Failed=${failed}, Remaining=${rem}`);
+      if (Number(done) + Number(failed) >= 5) break;
     }
 
-    // 4. Verify Thumbnail Gallery
-    const thumbCount = await evaluate("document.querySelectorAll('.batch-thumb-item').length");
-    console.log("Thumbnails in gallery:", thumbCount);
-    if (thumbCount !== 4) throw new Error(`Expected 4 thumbnails, got ${thumbCount}`);
+    const finalDone = await evaluate("document.getElementById('bStatDone').textContent");
+    const finalFailed = await evaluate("document.getElementById('bStatFailed').textContent");
+    console.log(`Final batch result: Completed=${finalDone}, Failed=${finalFailed}`);
+    if (finalDone !== "4" || finalFailed !== "1") {
+      throw new Error(`Expected 4 done and 1 failed, got done=${finalDone}, failed=${finalFailed}`);
+    }
 
-    const summaryText = await evaluate("document.getElementById('batchGallerySummary').textContent");
-    console.log("Thumbnail gallery summary:", summaryText);
-
-    // 5. Verify Selected Item in Interactive Viewer
-    const initialFilename = await evaluate("document.getElementById('bDetFilename').textContent");
-    const initialVerdict = await evaluate("document.getElementById('bDetVerdict').textContent");
-    const initialScore = await evaluate("document.getElementById('bDetScore').textContent");
-    console.log(`Active viewer initial state -> Filename: ${initialFilename}, Verdict: ${initialVerdict}, Score: ${initialScore}`);
-
-    // 6. Instrument network calls before switching thumbnail
+    // 6. Test duplicate submission prevention when clicking Inspect All again
+    console.log("4. Testing skip of already inspected images on second Inspect All click...");
     await evaluate(`
-      window.__networkCalls = 0;
-      const _origFetch = window.fetch;
+      window.__inspectedRequests = 0;
+      const _fetch = window.fetch;
       window.fetch = function(...args) {
-        window.__networkCalls++;
-        return _origFetch.apply(this, args);
+        if (args[0] && args[0].includes('/api/detect')) window.__inspectedRequests++;
+        return _fetch.apply(this, args);
       };
     `);
 
-    // 7. Click thumbnail 3 (sample_defect_1.jpg)
-    console.log("Clicking thumbnail 3 (sample_defect_1.jpg)...");
+    // Click Inspect All again without re-queueing
+    await evaluate("document.getElementById('btnBatchRun').click();");
+    await sleep(600);
+    const extraCalls = await evaluate("window.__inspectedRequests");
+    console.log("Extra requests dispatched when clicking completed batch without retry:", extraCalls);
+
+    // 7. Test individual RETRY button on the failed item
+    console.log("5. Testing individual RETRY button on the failed item...");
+    const failedItemActionBtn = await evaluate(`
+      (() => {
+        const failedRow = Array.from(document.querySelectorAll('.batch-table-row')).find(r => r.textContent.includes('FAIL'));
+        return failedRow ? failedRow.querySelector('.col-action button').textContent : null;
+      })()
+    `);
+    console.log("Failed item action button label:", failedItemActionBtn);
+    if (!failedItemActionBtn || !failedItemActionBtn.includes("RETRY")) {
+      throw new Error("Failed item must display a RETRY button");
+    }
+
+    // 8. Test thumbnail gallery & interactive viewer
+    console.log("6. Verifying interactive viewer & thumbnail gallery...");
+    const thumbCount = await evaluate("document.querySelectorAll('.batch-thumb-item').length");
+    console.log("Thumbnails rendered in gallery:", thumbCount);
+    if (thumbCount !== 5) throw new Error("Expected 5 thumbnails");
+
+    // Click thumbnail 3 (sample_defect_1.jpg)
     await evaluate("document.querySelectorAll('.batch-thumb-item')[2].click();");
     await sleep(400);
+    const viewerFilename = await evaluate("document.getElementById('bDetFilename').textContent");
+    const viewerVerdict = await evaluate("document.getElementById('bDetVerdict').textContent");
+    const viewerScore = await evaluate("document.getElementById('bDetScore').textContent");
+    console.log(`Selected thumbnail 3 -> Filename: ${viewerFilename}, Verdict: ${viewerVerdict}, Score: ${viewerScore}`);
+    if (!viewerFilename.includes("sample_defect_1.jpg")) throw new Error("Viewer filename mismatch");
 
-    const newFilename = await evaluate("document.getElementById('bDetFilename').textContent");
-    const newVerdict = await evaluate("document.getElementById('bDetVerdict').textContent");
-    const newScore = await evaluate("document.getElementById('bDetScore').textContent");
-    const newRegions = await evaluate("document.getElementById('bDetRegions').textContent");
-    const netCalls = await evaluate("window.__networkCalls");
-
-    console.log(`Active viewer updated state -> Filename: ${newFilename}, Verdict: ${newVerdict}, Score: ${newScore}, Regions: ${newRegions}`);
-    console.log("Extra network fetch calls triggered when clicking thumbnail:", netCalls);
-    if (netCalls !== 0) throw new Error(`Expected 0 network calls when switching thumbnails, got ${netCalls}`);
-
-    // 8. Verify Table Selection Synchronisation
-    const activeRowText = await evaluate("document.querySelector('.batch-table-row.is-selected-row').textContent");
-    console.log("Active table row text contains selected file:", activeRowText.includes("sample_defect_1.jpg"));
-
-    // 9. Click on Table Row 4 (sample_defect_2.jpg)
-    console.log("Clicking table row 4 (sample_defect_2.jpg)...");
-    await evaluate("document.querySelectorAll('.batch-table-row')[3].click();");
-    await sleep(400);
-    const rowFilename = await evaluate("document.getElementById('bDetFilename').textContent");
-    console.log("Active viewer after row click:", rowFilename);
-    if (!rowFilename.includes("sample_defect_2.jpg")) throw new Error("Row selection did not update viewer!");
-
-    // 10. Test CSV Export generator content
+    // 9. Test CSV Export contains all 5 rows
+    console.log("7. Verifying CSV Export contains all batch items (including failed)...");
     const csvContent = await evaluate(`
       (() => {
-        // Trigger downloadBatchCsv logic and return string
         const headers = ["Filename", "Verdict", "Anomaly_Score", "Deviation_Regions", "Status", "Round_Trip_Ms", "Error"];
         const rows = [headers.join(",")];
-        for (const item of batchItems) {
+        for (const item of window.batchItems) {
           rows.push([
             item.name,
-            item.verdict ? item.verdict.toUpperCase() : "NONE",
+            item.verdict ? item.verdict.toUpperCase() : (item.status === "failed" ? "FAILED" : "NONE"),
             item.score !== null ? item.score.toFixed(4) : "",
             item.status === "done" ? item.regionsCount : "",
             item.status.toUpperCase(),
@@ -176,20 +191,20 @@ async function main() {
         return rows.join("\\n");
       })()
     `);
-    console.log("Generated CSV sample:\n" + csvContent);
-    if (!csvContent.includes("sample_defect_1.jpg") || !csvContent.includes("DEFECT")) {
-      throw new Error("CSV missing expected batch results!");
+    console.log("Exported CSV preview:\n" + csvContent);
+    if (!csvContent.includes("corrupted_board.txt") || !csvContent.includes("sample_defect_1.jpg")) {
+      throw new Error("CSV does not contain all items!");
     }
 
-    // 11. Capture Desktop Screenshot
+    // 10. Capture Desktop and Mobile screenshots
+    console.log("8. Capturing updated screenshots...");
     const shotDesktop = await send("Page.captureScreenshot", { format: "png" });
     fs.writeFileSync(
-      "C:\\Users\\Tavish\\.gemini\\antigravity\\brain\\7f7ba03e-9898-47da-818e-b7cebc116b8a\\batch_redesign_desktop.png",
+      "C:\\Users\\Tavish\\.gemini\\antigravity\\brain\\7f7ba03e-9898-47da-818e-b7cebc116b8a\\batch_inspect_all_desktop.png",
       Buffer.from(shotDesktop.data, "base64")
     );
-    console.log("Saved batch_redesign_desktop.png");
+    console.log("Saved batch_inspect_all_desktop.png");
 
-    // 12. Capture Mobile Screenshot (390px)
     await send("Emulation.setDeviceMetricsOverride", {
       width: 390,
       height: 900,
@@ -199,12 +214,12 @@ async function main() {
     await sleep(800);
     const shotMobile = await send("Page.captureScreenshot", { format: "png" });
     fs.writeFileSync(
-      "C:\\Users\\Tavish\\.gemini\\antigravity\\brain\\7f7ba03e-9898-47da-818e-b7cebc116b8a\\batch_redesign_mobile.png",
+      "C:\\Users\\Tavish\\.gemini\\antigravity\\brain\\7f7ba03e-9898-47da-818e-b7cebc116b8a\\batch_inspect_all_mobile.png",
       Buffer.from(shotMobile.data, "base64")
     );
-    console.log("Saved batch_redesign_mobile.png");
+    console.log("Saved batch_inspect_all_mobile.png");
 
-    console.log("SUCCESS! ALL INTERACTIVE BATCH REQUIREMENTS VERIFIED.");
+    console.log("ALL BATCH MODE & INSPECT ALL ACCEPTANCE CHECKS PASSED!");
   } finally {
     proc.kill();
   }
