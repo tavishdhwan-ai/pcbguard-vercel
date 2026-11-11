@@ -3,12 +3,16 @@ Serves static files from public/ and routes /api/detect to api/detect.py.
 """
 import os
 import sys
+import socketserver
 from http.server import HTTPServer, SimpleHTTPRequestHandler
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, BASE_DIR)
 
-from api.detect import handler as DetectHandler
+from api.detect import handler as DetectHandler, get_session
+
+class ThreadedHTTPServer(socketserver.ThreadingMixIn, HTTPServer):
+    daemon_threads = True
 
 class DevServerHandler(SimpleHTTPRequestHandler):
     def __init__(self, *args, **kwargs):
@@ -29,7 +33,14 @@ class DevServerHandler(SimpleHTTPRequestHandler):
             self.send_error(404, "Endpoint not found")
 
 def main(port=3000):
-    server = HTTPServer(("0.0.0.0", port), DevServerHandler)
+    # Warm up ONNX session on server boot to eliminate cold-start latency
+    try:
+        get_session()
+        print("ONNX model session initialized and warmed up.", flush=True)
+    except Exception as e:
+        print(f"Warning: model warmup failed ({e})", flush=True)
+
+    server = ThreadedHTTPServer(("0.0.0.0", port), DevServerHandler)
     print(f"PCBGuard local server running at http://localhost:{port}", flush=True)
     try:
         server.serve_forever()
