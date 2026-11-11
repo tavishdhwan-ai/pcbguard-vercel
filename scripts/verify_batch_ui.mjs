@@ -156,32 +156,60 @@ async function main() {
       throw new Error("Failed item must display a RETRY button");
     }
 
-    // 8. Test thumbnail gallery & interactive viewer
-    console.log("6. Verifying interactive viewer & thumbnail gallery...");
+    // 8. Test thumbnail gallery, interactive viewer & Defect Name
+    console.log("6. Verifying interactive viewer & Defect Name display...");
     const thumbCount = await evaluate("document.querySelectorAll('.batch-thumb-item').length");
     console.log("Thumbnails rendered in gallery:", thumbCount);
     if (thumbCount !== 5) throw new Error("Expected 5 thumbnails");
 
-    // Click thumbnail 3 (sample_defect_1.jpg)
+    // Click thumbnail 1 (sample_clean_1.jpg - normal board)
+    await evaluate("document.querySelectorAll('.batch-thumb-item')[0].click();");
+    await sleep(400);
+    const cleanDefectName = await evaluate("document.getElementById('bDetDefectName').textContent");
+    console.log("Normal board defect name in viewer:", cleanDefectName);
+    if (!cleanDefectName.includes("None detected")) {
+      throw new Error(`Expected 'None detected' for normal board, got '${cleanDefectName}'`);
+    }
+
+    // Click thumbnail 3 (sample_defect_1.jpg - anomalous board)
     await evaluate("document.querySelectorAll('.batch-thumb-item')[2].click();");
     await sleep(400);
     const viewerFilename = await evaluate("document.getElementById('bDetFilename').textContent");
     const viewerVerdict = await evaluate("document.getElementById('bDetVerdict').textContent");
     const viewerScore = await evaluate("document.getElementById('bDetScore').textContent");
-    console.log(`Selected thumbnail 3 -> Filename: ${viewerFilename}, Verdict: ${viewerVerdict}, Score: ${viewerScore}`);
+    const viewerDefectName = await evaluate("document.getElementById('bDetDefectName').textContent");
+    console.log(`Selected thumbnail 3 -> Filename: ${viewerFilename}, Verdict: ${viewerVerdict}, Score: ${viewerScore}, Defect Name: ${viewerDefectName}`);
     if (!viewerFilename.includes("sample_defect_1.jpg")) throw new Error("Viewer filename mismatch");
+    if (!viewerDefectName || viewerDefectName === "None detected" || viewerDefectName === "Unavailable") {
+      throw new Error(`Expected validated defect class or unclassified deviation, got '${viewerDefectName}'`);
+    }
 
-    // 9. Test CSV Export contains all 5 rows
-    console.log("7. Verifying CSV Export contains all batch items (including failed)...");
+    // Check failed item (corrupted_board.txt)
+    await evaluate("document.querySelectorAll('.batch-thumb-item')[4].click();");
+    await sleep(400);
+    const failedDefectName = await evaluate("document.getElementById('bDetDefectName').textContent");
+    console.log("Failed item defect name in viewer:", failedDefectName);
+    if (!failedDefectName.includes("Unavailable")) {
+      throw new Error(`Expected 'Unavailable' for failed item, got '${failedDefectName}'`);
+    }
+
+    // Verify Defect Name column in table
+    const tableHeaders = await evaluate("Array.from(document.querySelectorAll('thead th')).map(th => th.textContent.trim())");
+    console.log("Table headers:", tableHeaders);
+    if (!tableHeaders.includes("DEFECT NAME")) throw new Error("DEFECT NAME column missing from table header!");
+
+    // 9. Test CSV Export contains Defect_Name column and all 5 rows
+    console.log("7. Verifying CSV Export contains Defect_Name column and all batch items...");
     const csvContent = await evaluate(`
       (() => {
-        const headers = ["Filename", "Verdict", "Anomaly_Score", "Deviation_Regions", "Status", "Round_Trip_Ms", "Error"];
+        const headers = ["Filename", "Verdict", "Deviation_Score", "Defect_Name", "Deviation_Regions", "Status", "Round_Trip_Ms", "Error"];
         const rows = [headers.join(",")];
         for (const item of window.batchItems) {
           rows.push([
             item.name,
             item.verdict ? item.verdict.toUpperCase() : (item.status === "failed" ? "FAILED" : "NONE"),
             item.score !== null ? item.score.toFixed(4) : "",
+            item.defectName || "Unclassified deviation",
             item.status === "done" ? item.regionsCount : "",
             item.status.toUpperCase(),
             item.roundTripMs || "",
@@ -192,8 +220,8 @@ async function main() {
       })()
     `);
     console.log("Exported CSV preview:\n" + csvContent);
-    if (!csvContent.includes("corrupted_board.txt") || !csvContent.includes("sample_defect_1.jpg")) {
-      throw new Error("CSV does not contain all items!");
+    if (!csvContent.includes("Defect_Name") || !csvContent.includes("corrupted_board.txt")) {
+      throw new Error("CSV does not contain Defect_Name column or all items!");
     }
 
     // 10. Capture Desktop and Mobile screenshots

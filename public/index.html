@@ -1081,11 +1081,14 @@
       <div id="samplesGrid" class="samples-grid"></div>
     </div>
 
-    <!-- Oversized numeral readout -->
+    <!-- Oversized numeral readout & Defect Name -->
     <section class="gauge-readout" aria-live="polite">
       <div id="defectCount" class="gauge-numeral">&ndash;</div>
       <div class="gauge-meta-row">
         <div id="gaugeLabel" class="gauge-label">AWAITING INPUT</div>
+        <div id="gaugeDefectRow" class="gauge-defect-row" style="font-family: var(--font-mono); font-size: 12px; margin-top: 4px; color: var(--ink);">
+          DEVIATION SCORE: <strong id="gaugeScoreVal" style="color: var(--accent);">&ndash;</strong> &middot; DEFECT NAME: <strong id="gaugeDefectNameVal">&ndash;</strong>
+        </div>
         <div id="gaugeTiming" class="gauge-timing">INFERENCE: &ndash; &middot; ROUND TRIP: &ndash;</div>
       </div>
     </section>
@@ -1244,8 +1247,12 @@
           <div class="batch-detail-val" id="bDetVerdict">&ndash;</div>
         </div>
         <div class="batch-detail-cell">
-          <div class="batch-detail-lbl">ANOMALY SCORE</div>
+          <div class="batch-detail-lbl">DEVIATION SCORE</div>
           <div class="batch-detail-val" id="bDetScore">&ndash;</div>
+        </div>
+        <div class="batch-detail-cell">
+          <div class="batch-detail-lbl">DEFECT NAME</div>
+          <div class="batch-detail-val" id="bDetDefectName">&ndash;</div>
         </div>
         <div class="batch-detail-cell">
           <div class="batch-detail-lbl">DEVIATION REGIONS</div>
@@ -1276,7 +1283,8 @@
               <th>FILENAME</th>
               <th>STATUS</th>
               <th>VERDICT</th>
-              <th class="num-right">ANOMALY SCORE</th>
+              <th class="num-right">DEVIATION SCORE</th>
+              <th>DEFECT NAME</th>
               <th class="num-right">DEVIATION REGIONS</th>
               <th class="num-right">ROUND TRIP</th>
               <th>ACTION</th>
@@ -1284,7 +1292,7 @@
           </thead>
           <tbody id="batchTableBody">
             <tr>
-              <td colspan="8" class="empty-cell">NO BATCH ITEMS LOADED</td>
+              <td colspan="9" class="empty-cell">NO BATCH ITEMS LOADED</td>
             </tr>
           </tbody>
         </table>
@@ -1347,6 +1355,54 @@
   const defectCount = document.getElementById("defectCount");
   const gaugeLabel = document.getElementById("gaugeLabel");
   const gaugeTiming = document.getElementById("gaugeTiming");
+  const gaugeScoreVal = document.getElementById("gaugeScoreVal");
+  const gaugeDefectNameVal = document.getElementById("gaugeDefectNameVal");
+
+  // Validated Defect Classes from multi-class detector
+  const SUPPORTED_DEFECT_CLASSES = {
+    "missing_hole": "Missing Hole",
+    "mouse_bite": "Mouse Bite",
+    "open_circuit": "Open Circuit",
+    "short": "Short",
+    "spur": "Spur",
+    "spurious_copper": "Spurious Copper"
+  };
+
+  function resolveDefectName(itemOrDetections, verdict, regionsCount) {
+    let detections = [];
+    let status = "done";
+    let v = verdict;
+    let rCount = regionsCount;
+
+    if (itemOrDetections && typeof itemOrDetections === "object" && !Array.isArray(itemOrDetections)) {
+      status = itemOrDetections.status || "done";
+      v = itemOrDetections.verdict || v;
+      rCount = itemOrDetections.regionsCount !== undefined ? itemOrDetections.regionsCount : (itemOrDetections.regions ? itemOrDetections.regions.length : 0);
+      detections = itemOrDetections.rawDetections || itemOrDetections.detections || [];
+    } else if (Array.isArray(itemOrDetections)) {
+      detections = itemOrDetections;
+    }
+
+    if (status === "failed" || status === "cancelled" || v === "cannot_inspect") {
+      return "Unavailable";
+    }
+    if (status === "queued" || status === "inspecting") {
+      return "Pending";
+    }
+    if (v === "pass" || (rCount === 0 && detections.length === 0)) {
+      return "None detected";
+    }
+
+    const primary = detections.slice().sort((a, b) => (b.confidence || 0) - (a.confidence || 0))[0];
+    if (primary && primary.name) {
+      const raw = String(primary.name).toLowerCase().trim();
+      if (SUPPORTED_DEFECT_CLASSES[raw]) {
+        return SUPPORTED_DEFECT_CLASSES[raw];
+      }
+    }
+
+    return "Unclassified deviation";
+  }
 
   const stage = document.getElementById("stage");
   const dropPrompt = document.getElementById("dropPrompt");
@@ -1858,20 +1914,29 @@
     const d = currentDecision;
     defectCount.classList.remove("has-defects", "is-borderline");
 
+    const peakScore = currentRegions.length > 0 ? Math.max(...currentRegions.map(r => r.score)) : 0.0;
+    const defectName = resolveDefectName(currentDetections, d.verdict, currentRegions.length);
+
+    if (gaugeScoreVal) gaugeScoreVal.textContent = d.verdict === "cannot_inspect" ? "\u2013" : peakScore.toFixed(4);
+    if (gaugeDefectNameVal) gaugeDefectNameVal.textContent = defectName;
+
     if (d.verdict === "defect") {
       defectCount.textContent = currentRegions.length;
       defectCount.classList.add("has-defects");
-      gaugeLabel.textContent = `${currentRegions.length} DEVIATION REGION${currentRegions.length === 1 ? "" : "S"} DETECTED`;
+      gaugeLabel.textContent = `${currentRegions.length} DEVIATION REGION${currentRegions.length === 1 ? "" : "S"} DETECTED \u2014 ${defectName.toUpperCase()}`;
     } else if (d.verdict === "borderline") {
       defectCount.textContent = currentRegions.length || "0";
       defectCount.classList.add("is-borderline");
-      gaugeLabel.textContent = "BORDERLINE ANOMALY \u2014 CLOSE TO THRESHOLD. REVIEW MANUALLY.";
+      gaugeLabel.textContent = `BORDERLINE ANOMALY \u2014 CLOSE TO THRESHOLD. (${defectName})`;
     } else if (d.verdict === "cannot_inspect") {
       defectCount.textContent = "\u2013";
       gaugeLabel.textContent = `CANNOT INSPECT: ${d.reason || "INPUT REJECTED"}`;
+      if (gaugeScoreVal) gaugeScoreVal.textContent = "\u2013";
+      if (gaugeDefectNameVal) gaugeDefectNameVal.textContent = "Unavailable";
     } else {
       defectCount.textContent = "0";
       gaugeLabel.textContent = "NO DEVIATIONS DETECTED";
+      if (gaugeDefectNameVal) gaugeDefectNameVal.textContent = "None detected";
     }
 
     gaugeTiming.textContent = `INFERENCE: ${currentTiming.inferenceMs.toFixed(1)} MS \u00b7 ROUND TRIP: ${currentTiming.roundTripMs} MS`;
@@ -1892,9 +1957,12 @@
       tr.dataset.idx = idx;
       tr.tabIndex = 0;
 
+      const rawClass = r.name || (currentDetections[idx] ? currentDetections[idx].name : null);
+      const className = rawClass && SUPPORTED_DEFECT_CLASSES[rawClass.toLowerCase()] ? SUPPORTED_DEFECT_CLASSES[rawClass.toLowerCase()] : "Unclassified deviation";
+
       tr.innerHTML = `
         <td>${r.id}</td>
-        <td><strong>Region #${r.id}</strong></td>
+        <td><strong>Region #${r.id} (${className})</strong></td>
         <td class="num-right">${r.score.toFixed(4)}</td>
         <td class="num-right">[${r.centroid_px[0]}, ${r.centroid_px[1]}]</td>
         <td class="num-right">${r.width_px}&times;${r.height_px} px</td>
@@ -2014,16 +2082,19 @@
   // Feature 6: CSV & JSON Exports & Print
   btnCsv.addEventListener("click", () => {
     if (!currentFile || currentRegions.length === 0) return;
-    const headers = ["Region_ID", "Anomaly_Score", "Centroid_X_Px", "Centroid_Y_Px", "Width_Px", "Height_Px", "Area_Px2", "Threshold", "Model_Version", "Model_Commit"];
+    const headers = ["Region_ID", "Anomaly_Score", "Defect_Name", "Centroid_X_Px", "Centroid_Y_Px", "Width_Px", "Height_Px", "Area_Px2", "Threshold", "Model_Version", "Model_Commit"];
     const rows = [headers.join(",")];
     const threshold = Number(confSlider.value);
     const ver = modelMeta?.model?.version || "2.1.0";
     const commit = modelMeta?.model?.commit || "7731565";
 
-    currentRegions.forEach(r => {
+    currentRegions.forEach((r, idx) => {
+      const rawClass = r.name || (currentDetections[idx] ? currentDetections[idx].name : null);
+      const className = rawClass && SUPPORTED_DEFECT_CLASSES[rawClass.toLowerCase()] ? SUPPORTED_DEFECT_CLASSES[rawClass.toLowerCase()] : "Unclassified deviation";
       rows.push([
         r.id,
         r.score.toFixed(4),
+        `"${className}"`,
         r.centroid_px[0],
         r.centroid_px[1],
         r.width_px,
@@ -2048,6 +2119,7 @@
     const bundle = {
       schemaVersion: "2.1.0",
       exportedAt: new Date().toISOString(),
+      defectClassification: resolveDefectName(currentDetections, currentDecision?.verdict, currentRegions.length),
       model: {
         name: modelMeta?.model?.name,
         version: modelMeta?.model?.version,
@@ -2100,6 +2172,7 @@
   const bDetFilename = document.getElementById("bDetFilename");
   const bDetVerdict = document.getElementById("bDetVerdict");
   const bDetScore = document.getElementById("bDetScore");
+  const bDetDefectName = document.getElementById("bDetDefectName");
   const bDetRegions = document.getElementById("bDetRegions");
   const bDetDimensions = document.getElementById("bDetDimensions");
   const bDetLatency = document.getElementById("bDetLatency");
@@ -2248,22 +2321,19 @@
   async function inspectAllBatch() {
     if (batchRunning) return; // Prevent duplicate batch submissions while a batch is already running
 
-    // Filter items to inspect: skip successfully inspected images unless all are done or user explicitly requests
+    // Filter items to inspect: skip successfully inspected images
     const uninspected = batchItems.filter(i => i.status !== "done");
-    if (uninspected.length === 0 && batchItems.length > 0) {
-      // Re-inspect all if user clicked Re-Inspect All
-      batchItems.forEach(i => {
+    if (uninspected.length === 0) {
+      // All items are already successfully inspected; do not submit twice
+      return;
+    }
+
+    uninspected.forEach(i => {
+      if (i.status === "failed" || i.status === "cancelled") {
         i.status = "queued";
         i.error = null;
-      });
-    } else {
-      uninspected.forEach(i => {
-        if (i.status === "failed" || i.status === "cancelled") {
-          i.status = "queued";
-          i.error = null;
-        }
-      });
-    }
+      }
+    });
 
     batchCancelled = false;
     batchRunning = true;
@@ -2412,6 +2482,7 @@
       item.regions = derivedRegions.filter(r => r.score >= threshold);
       item.regionsCount = item.regions.length;
       item.status = "done";
+      item.defectName = resolveDefectName(item);
 
       // Select first completed item automatically if none selected
       if (!selectedBatchItemId) {
@@ -2421,6 +2492,7 @@
       }
     } catch (err) {
       item.status = "failed";
+      item.defectName = "Unavailable";
       item.error = err.message || "Failed";
       if (selectedBatchItemId === item.id) {
         renderBatchViewer(item);
@@ -2491,6 +2563,8 @@
     vCell.style.color = vColor;
     vCell.textContent = item.verdict ? item.verdict.toUpperCase() : (item.status === "failed" ? "FAIL" : "\u2013");
     tr.querySelector(".col-score").textContent = item.score !== null ? item.score.toFixed(4) : "\u2013";
+    const dCell = tr.querySelector(".col-defect-name");
+    if (dCell) dCell.textContent = item.defectName || resolveDefectName(item);
     tr.querySelector(".col-regions").textContent = item.status === "done" ? item.regionsCount : "\u2013";
     tr.querySelector(".col-rt").textContent = item.roundTripMs !== null ? item.roundTripMs + " ms" : "\u2013";
     tr.querySelector(".col-action").innerHTML = actionBtnHtml;
@@ -2593,6 +2667,7 @@
 
       bDetVerdict.innerHTML = `<span style="color:${vColor}">${vUpper}</span>`;
       bDetScore.textContent = item.score !== null ? item.score.toFixed(4) : "\u2013";
+      if (bDetDefectName) bDetDefectName.textContent = item.defectName || resolveDefectName(item);
       bDetRegions.textContent = `${item.regionsCount} region${item.regionsCount === 1 ? "" : "s"} detected`;
       bDetDimensions.textContent = item.origWidth && item.origHeight ? `${item.origWidth} \u00d7 ${item.origHeight} px` : "\u2013";
       bDetLatency.textContent = `${item.roundTripMs} ms (infer: ${item.inferenceMs.toFixed(1)} ms)`;
@@ -2612,6 +2687,7 @@
 
       bDetVerdict.innerHTML = `<span style="color:#ef4444">FAILED</span>`;
       bDetScore.textContent = "\u2013";
+      if (bDetDefectName) bDetDefectName.textContent = "Unavailable";
       bDetRegions.textContent = "\u2013";
       bDetDimensions.textContent = "\u2013";
       bDetLatency.textContent = item.error || "Inspection error";
@@ -2622,6 +2698,7 @@
 
       bDetVerdict.textContent = item.status.toUpperCase();
       bDetScore.textContent = "\u2013";
+      if (bDetDefectName) bDetDefectName.textContent = "Pending";
       bDetRegions.textContent = "\u2013";
       bDetDimensions.textContent = "\u2013";
       bDetLatency.textContent = "In progress...";
@@ -2704,7 +2781,7 @@
 
   function renderBatchTable() {
     if (batchItems.length === 0) {
-      batchTableBody.innerHTML = `<tr><td colspan="8" class="empty-cell">NO BATCH ITEMS LOADED</td></tr>`;
+      batchTableBody.innerHTML = `<tr><td colspan="9" class="empty-cell">NO BATCH ITEMS LOADED</td></tr>`;
       btnBatchExportCsv.disabled = true;
       btnBatchExportCsvBottom.disabled = true;
       btnBatchExportJson.disabled = true;
@@ -2741,6 +2818,7 @@
         <td class="col-status">${item.status.toUpperCase()}</td>
         <td class="col-verdict" style="font-weight:600; color:${vColor}">${item.verdict ? item.verdict.toUpperCase() : (item.status === "failed" ? "FAIL" : "\u2013")}</td>
         <td class="col-score num-right">${item.score !== null ? item.score.toFixed(4) : "\u2013"}</td>
+        <td class="col-defect-name">${item.defectName || resolveDefectName(item)}</td>
         <td class="col-regions num-right">${item.status === "done" ? item.regionsCount : "\u2013"}</td>
         <td class="col-rt num-right">${item.roundTripMs !== null ? item.roundTripMs + " ms" : "\u2013"}</td>
         <td class="col-action">${actionBtnHtml}</td>
@@ -2766,7 +2844,8 @@
     const headers = [
       "Filename",
       "Verdict",
-      "Anomaly_Score",
+      "Deviation_Score",
+      "Defect_Name",
       "Deviation_Regions",
       "Status",
       "Round_Trip_Ms",
@@ -2795,6 +2874,7 @@
         escapeCsv(item.name),
         escapeCsv(item.verdict ? item.verdict.toUpperCase() : (item.status === "failed" ? "FAILED" : "NONE")),
         item.score !== null ? item.score.toFixed(4) : "",
+        escapeCsv(item.defectName || resolveDefectName(item)),
         item.status === "done" ? item.regionsCount : "",
         escapeCsv(item.status.toUpperCase()),
         item.roundTripMs !== null ? item.roundTripMs : "",

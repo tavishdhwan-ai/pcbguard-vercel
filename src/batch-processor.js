@@ -8,6 +8,41 @@
  * - CSV and JSON exports with model version and commit
  */
 
+const SUPPORTED_DEFECT_CLASSES = {
+  "missing_hole": "Missing Hole",
+  "mouse_bite": "Mouse Bite",
+  "open_circuit": "Open Circuit",
+  "short": "Short",
+  "spur": "Spur",
+  "spurious_copper": "Spurious Copper"
+};
+
+function resolveDefectName(item) {
+  if (!item || item.status === "failed" || item.status === "cancelled") {
+    return "Unavailable";
+  }
+  if (item.status === "queued" || item.status === "inspecting") {
+    return "Pending";
+  }
+  if (item.verdict === "pass" || (item.regionsCount === 0 && (!item.detections || item.detections.length === 0))) {
+    return "None detected";
+  }
+
+  const detections = item.detections || item.rawDetections || [];
+  const primaryDet = detections.length > 0
+    ? detections.slice().sort((a, b) => (b.confidence || 0) - (a.confidence || 0))[0]
+    : null;
+
+  if (primaryDet && primaryDet.name) {
+    const raw = String(primaryDet.name).toLowerCase().trim();
+    if (SUPPORTED_DEFECT_CLASSES[raw]) {
+      return SUPPORTED_DEFECT_CLASSES[raw];
+    }
+  }
+
+  return "Unclassified deviation";
+}
+
 class BatchProcessor {
   constructor(options = {}) {
     this.maxFiles = options.maxFiles || 50;
@@ -132,8 +167,10 @@ class BatchProcessor {
       item.origWidth = result.origWidth || null;
       item.origHeight = result.origHeight || null;
       item.status = "done";
+      item.defectName = result.defectName || resolveDefectName(item);
     } catch (err) {
       item.status = "failed";
+      item.defectName = "Unavailable";
       item.error = err.message || "Inspection failed";
     }
 
@@ -170,6 +207,7 @@ class BatchProcessor {
       "Filename",
       "Verdict",
       "Anomaly_Score",
+      "Defect_Name",
       "Deviation_Regions",
       "Status",
       "Size_Bytes",
@@ -201,6 +239,7 @@ class BatchProcessor {
         escapeCsv(item.name),
         escapeCsv(item.verdict ? item.verdict.toUpperCase() : "NONE"),
         item.score !== null ? item.score.toFixed(4) : "",
+        escapeCsv(item.defectName || resolveDefectName(item)),
         item.regionsCount !== undefined && item.regionsCount !== null ? item.regionsCount : "",
         escapeCsv(item.status.toUpperCase()),
         item.size,
@@ -239,6 +278,7 @@ class BatchProcessor {
         status: i.status,
         verdict: i.verdict,
         score: i.score,
+        defectName: i.defectName || resolveDefectName(i),
         regionsCount: i.regionsCount,
         roundTripMs: i.roundTripMs,
         error: i.error
