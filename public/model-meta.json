@@ -1,0 +1,46 @@
+{
+  "$schema": "./model-meta.schema.json",
+  "model": {
+    "name": "YOLO26s-PCB-Anomaly",
+    "version": "2.1.0",
+    "commit": "7731565",
+    "trainedOn": "PKU-Market-PCB benchmark dataset",
+    "datasetLicense": "Research Use Only",
+    "datasetAttribution": "Peking University & High-Speed Circuit Laboratory",
+    "inputSize": [640, 640]
+  },
+  "decision": {
+    "threshold": 0.45,
+    "borderlineFraction": 0.10
+  },
+  "validation": {
+    "goodScores": [0.02, 0.04, 0.05, 0.08, 0.11, 0.14, 0.16, 0.19, 0.22, 0.26, 0.31, 0.34],
+    "defectScores": [0.38, 0.42, 0.46, 0.49, 0.53, 0.58, 0.62, 0.67, 0.73, 0.79, 0.84, 0.91],
+    "usedToSelectThreshold": true
+  },
+  "metrics": {
+    "imageAUROC": null,
+    "pixelAUROC": null,
+    "fprAtThreshold": 0.0,
+    "latencyMs": 198.8,
+    "device": "Vercel Serverless Function (1 vCPU, 1024MB)"
+  },
+  "robustness": [
+    {
+      "perturbation": "Gaussian blur",
+      "level": "sigma=1.5",
+      "imageAUROC": null,
+      "fprAtThreshold": null
+    },
+    {
+      "perturbation": "Luminance shift",
+      "level": "-20%",
+      "imageAUROC": null,
+      "fprAtThreshold": null
+    }
+  ],
+  "ood": {
+    "method": "None (unsupported by current backend)",
+    "notes": "Model operates strictly within the distribution of green solder mask boards under uniform optical illumination."
+  }
+}
